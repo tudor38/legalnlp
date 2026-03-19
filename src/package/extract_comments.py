@@ -22,12 +22,17 @@ Document context (all versions):
   are not currently resolved (context will be None for those comments).
 """
 
-import re
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional
+import spacy
+
+
+nlp = spacy.blank("en")
+nlp.add_pipe("sentencizer")
+
 
 # ---------------------------------------------------------------------------
 # Namespaces
@@ -194,37 +199,13 @@ def _apply_extended(
 # Document context — selected text, paragraph, and sentences
 # ---------------------------------------------------------------------------
 def _find_sentences_containing(text: str, sel_start: int, sel_end: int) -> list[str]:
-    """
-    Return every sentence in text whose span overlaps [sel_start, sel_end).
-
-    Sentence boundaries are detected at:
-      - One or more spaces that follow sentence-ending punctuation (. ! ?)
-      - Newlines (present when paragraph_text spans multiple paragraphs)
-
-    This is intentionally simple.  Abbreviations such as "Dr. Smith" may
-    cause false splits.  For higher accuracy, swap in a NLP library such as
-    spaCy or NLTK's Punkt tokenizer.
-    """
     if not text or sel_start >= sel_end:
         return []
-
-    sel_end = min(sel_end, len(text))
-
-    # Matches whitespace/newlines that separate two sentences.
-    # The lookbehind keeps the punctuation mark inside the preceding sentence.
-    boundary_re = re.compile(r"(?<=[.!?]) +|\n+")
-
-    spans: list[tuple[int, int]] = []
-    prev = 0
-    for m in boundary_re.finditer(text):
-        spans.append((prev, m.start()))  # sentence ends before the whitespace
-        prev = m.end()  # next sentence starts after it
-    spans.append((prev, len(text)))
-
+    doc = nlp(text)
     return [
-        text[s:e].strip()
-        for s, e in spans
-        if s < sel_end and e > sel_start and text[s:e].strip()
+        sent.text.strip()
+        for sent in doc.sents
+        if sent.start_char < sel_end and sent.end_char > sel_start
     ]
 
 
