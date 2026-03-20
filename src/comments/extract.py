@@ -126,6 +126,7 @@ def _is_libreoffice(zip_names: list[str], names_bytes: dict[str, bytes]) -> bool
             return "libreoffice" in elem.text.lower()
     return False
 
+
 # ---------------------------------------------------------------------------
 # Parsers — one per file, version-agnostic internally
 # ---------------------------------------------------------------------------
@@ -500,3 +501,15 @@ if __name__ == "__main__":
             if reply.context:
                 print(f"      Selected: {reply.context.selected_text!r}")
         print()
+
+
+def extract_paragraphs(docx: DocxSource) -> list[str]:
+    with zipfile.ZipFile(docx) as z:
+        if "word/document.xml" not in z.namelist():
+            return []
+        root = ET.fromstring(z.read("word/document.xml"))
+    return [
+        "".join(t.text or "" for t in para.iter(_tag(W, "t")))
+        for para in root.iter(_tag(W, "p"))
+        if any(t.text for t in para.iter(_tag(W, "t")))  # skip empty paragraphs
+    ]
