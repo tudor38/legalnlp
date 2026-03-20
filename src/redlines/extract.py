@@ -30,7 +30,7 @@ comments API.
 import io
 import zipfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from enum import Enum, auto
 from pathlib import Path
 from typing import Literal, Optional
@@ -44,7 +44,7 @@ nlp.add_pipe("sentencizer")
 # ---------------------------------------------------------------------------
 # Namespaces  (shared with extract_comments)
 # ---------------------------------------------------------------------------
-W   = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -57,16 +57,17 @@ def _tag(ns: str, local: str) -> str:
 # Data model
 # ---------------------------------------------------------------------------
 class WordVersion(Enum):
-    LEGACY   = auto()
+    LEGACY = auto()
     EXTENDED = auto()
-    MODERN   = auto()
+    MODERN = auto()
 
 
 @dataclass
 class Span:
     """A [start, end) character range, paragraph-relative."""
+
     start: int
-    end:   int
+    end: int
 
     def __len__(self) -> int:
         return self.end - self.start
@@ -78,28 +79,30 @@ class Span:
 @dataclass
 class SentenceSpan:
     """A sentence and its paragraph-relative character span."""
-    text:  str
-    span:  Span
+
+    text: str
+    span: Span
 
 
 @dataclass
 class RedlineContext:
     """Surrounding text context for a tracked change."""
-    para_idx:       int                 # 0-based paragraph index in document
-    paragraph_text: str                 # full text of the containing paragraph
-    sentences:      list[SentenceSpan]  # sentences overlapping the change
+
+    para_idx: int  # 0-based paragraph index in document
+    paragraph_text: str  # full text of the containing paragraph
+    sentences: list[SentenceSpan]  # sentences overlapping the change
 
 
 @dataclass
 class Redline:
-    id:         str
-    author:     str
-    date:       str
-    kind:       Literal["insertion", "deletion"]
-    text:       str
-    char_start: int                     # paragraph-relative, inclusive
-    char_end:   int                     # paragraph-relative, exclusive
-    context:    Optional[RedlineContext] = None
+    id: str
+    author: str
+    date: str
+    kind: Literal["insertion", "deletion"]
+    text: str
+    char_start: int  # paragraph-relative, inclusive
+    char_end: int  # paragraph-relative, exclusive
+    context: Optional[RedlineContext] = None
 
     @property
     def span(self) -> Span:
@@ -112,9 +115,11 @@ class Redline:
             for f in fields(self)
             if f.name not in ("context",)
         } | {
-            "para_idx":  self.context.para_idx       if self.context else None,
+            "para_idx": self.context.para_idx if self.context else None,
             "paragraph": self.context.paragraph_text if self.context else None,
-            "sentences": [s.text for s in self.context.sentences] if self.context else [],
+            "sentences": [s.text for s in self.context.sentences]
+            if self.context
+            else [],
         }
 
 
@@ -123,7 +128,7 @@ class Redline:
 # ---------------------------------------------------------------------------
 def detect_version(zip_names: list[str]) -> WordVersion:
     has_extended = "word/commentsExtended.xml" in zip_names
-    has_ids      = "word/commentsIds.xml"      in zip_names
+    has_ids = "word/commentsIds.xml" in zip_names
     if has_extended and has_ids:
         return WordVersion.MODERN
     if has_extended:
@@ -146,8 +151,8 @@ def _find_sentences_containing(
     doc = nlp(text)
     return [
         SentenceSpan(
-            text = sent.text.strip(),
-            span = Span(sent.start_char, sent.end_char),
+            text=sent.text.strip(),
+            span=Span(sent.start_char, sent.end_char),
         )
         for sent in doc.sents
         if sent.start_char < sel_end and sent.end_char > sel_start
@@ -195,23 +200,23 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
     """
     root = ET.fromstring(xml_bytes)
 
-    redlines:     list[Redline] = []
-    para_texts:   list[str]     = []
+    redlines: list[Redline] = []
+    para_texts: list[str] = []
 
     # {redline_id: {"start": int, "end": int, "para_idx": int}}
     change_spans: dict[str, dict] = {}
 
     for para_idx, para in enumerate(root.iter(_tag(W, "p"))):
-        char_pos         = 0
+        char_pos = 0
         para_text_parts: list[str] = []
 
         for elem in para.iter():
             tag = elem.tag
 
             if tag in (_tag(W, "ins"), _tag(W, "del")):
-                rid    = elem.get(_tag(W, "id"))
+                rid = elem.get(_tag(W, "id"))
                 author = elem.get(_tag(W, "author"), "")
-                date   = elem.get(_tag(W, "date"),   "")
+                date = elem.get(_tag(W, "date"), "")
                 kind: Literal["insertion", "deletion"] = (
                     "insertion" if tag == _tag(W, "ins") else "deletion"
                 )
@@ -223,19 +228,21 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
                     continue
 
                 change_spans[rid] = {
-                    "start":    char_pos,
-                    "end":      char_pos + len(text),
+                    "start": char_pos,
+                    "end": char_pos + len(text),
                     "para_idx": para_idx,
                 }
-                redlines.append(Redline(
-                    id         = rid,
-                    author     = author,
-                    date       = date,
-                    kind       = kind,
-                    text       = text,
-                    char_start = char_pos,
-                    char_end   = char_pos + len(text),
-                ))
+                redlines.append(
+                    Redline(
+                        id=rid,
+                        author=author,
+                        date=date,
+                        kind=kind,
+                        text=text,
+                        char_start=char_pos,
+                        char_end=char_pos + len(text),
+                    )
+                )
 
             elif tag == _tag(W, "t"):
                 t = elem.text or ""
@@ -260,12 +267,12 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
 
         para_text = para_texts[span["para_idx"]]
         sel_start = span["start"]
-        sel_end   = span["end"]
+        sel_end = span["end"]
 
         rid_to_redline[rid].context = RedlineContext(
-            para_idx       = span["para_idx"],
-            paragraph_text = para_text,
-            sentences      = _find_sentences_containing(para_text, sel_start, sel_end),
+            para_idx=span["para_idx"],
+            paragraph_text=para_text,
+            sentences=_find_sentences_containing(para_text, sel_start, sel_end),
         )
 
     return redlines
@@ -299,9 +306,11 @@ def extract_redlines(docx: DocxSource) -> tuple[list[Redline], WordVersion]:
     Formatting-only changes are not included.
     """
     with zipfile.ZipFile(docx) as z:
-        names          = z.namelist()
-        version        = detect_version(names)
-        document_bytes = z.read("word/document.xml") if "word/document.xml" in names else b""
+        names = z.namelist()
+        version = detect_version(names)
+        document_bytes = (
+            z.read("word/document.xml") if "word/document.xml" in names else b""
+        )
 
     if not document_bytes:
         return [], version
