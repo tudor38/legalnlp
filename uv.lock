@@ -360,6 +360,7 @@ name = "legalnlp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "altair" },
     { name = "spacy" },
     { name = "st-annotated-text" },
     { name = "streamlit" },
@@ -367,6 +368,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "altair", specifier = ">=6.0.0" },
     { name = "spacy", specifier = ">=3.8.11" },
     { name = "st-annotated-text", specifier = ">=4.0.2" },
     { name = "streamlit", specifier = ">=1.55.0" },

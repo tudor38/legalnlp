@@ -22,13 +22,15 @@ Document context (all versions):
   are not currently resolved (context will be None for those comments).
 """
 
+import io
 import zipfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import Enum, auto
+from pathlib import Path
 from typing import Optional
-import spacy
 
+import spacy
 
 nlp = spacy.blank("en")
 nlp.add_pipe("sentencizer")
@@ -71,9 +73,22 @@ class Comment:
     date: str
     text: str
     resolved: bool = False
-    parent_id: Optional[str] = None  # comment id of parent, if a reply
+    parent_id: Optional[str] = None
     replies: list["Comment"] = field(default_factory=list)
-    context: Optional[CommentContext] = None  # None for header/footer comments
+    context: Optional[CommentContext] = None
+
+    def to_row(self) -> dict:
+        return {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name not in ("replies", "context", "parent_id")
+        } | {
+            "parent_id": self.parent_id,
+            "replies": len(self.replies),
+            "selected": self.context.selected_text if self.context else None,
+            "paragraph": self.context.paragraph_text if self.context else None,
+            "sentences": self.context.sentences if self.context else [],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +110,21 @@ def detect_version(zip_names: list[str]) -> WordVersion:
         return WordVersion.EXTENDED
     return WordVersion.LEGACY
 
+
+def _is_libreoffice(zip_names: list[str], names_bytes: dict[str, bytes]) -> bool:
+    """
+    LibreOffice doesn't write commentsIds.xml and uses little-endian hex
+    paraIds in commentsExtended.xml instead of real paragraph identifiers.
+    We detect it via the app.xml producer string.
+    """
+    if "docProps/app.xml" not in zip_names:
+        return False
+    root = ET.fromstring(names_bytes["docProps/app.xml"])
+    # app.xml has no namespace on <Application> in LibreOffice
+    for elem in root.iter():
+        if elem.tag.endswith("Application") and elem.text:
+            return "libreoffice" in elem.text.lower()
+    return False
 
 # ---------------------------------------------------------------------------
 # Parsers — one per file, version-agnostic internally
@@ -122,10 +152,11 @@ def _parse_comments(xml_bytes: bytes) -> tuple[dict[str, Comment], dict[str, str
         date = c.get(_tag(W, "date"), "")
         text = "".join(t.text or "" for t in c.iter(_tag(W, "t")))
 
+        if cid is None:
+            continue
+
         comments[cid] = Comment(id=cid, author=author, date=date, text=text)
 
-        # Map the first paragraph's paraId to this comment.
-        # Word stores the stable per-paragraph identity in w14:paraId.
         first_para = c.find(_tag(W, "p"))
         if first_para is not None:
             para_id = first_para.get(_tag(W14, "paraId"))
@@ -144,10 +175,6 @@ def _parse_comments_ids(xml_bytes: bytes) -> dict[str, str]:
 
         w14:paraId       – paraId of one paragraph inside the comment body
         w14:paraIdOwner  – paraId of the thread-root comment's paragraph
-
-    Returns a flat {paraId: paraId_of_root} map so that any paragraph in a
-    thread can be resolved back to the root comment.  Callers then look up
-    the root paraId in para_to_comment to get the actual comment id.
     """
     root = ET.fromstring(xml_bytes)
 
@@ -161,21 +188,33 @@ def _parse_comments_ids(xml_bytes: bytes) -> dict[str, str]:
     return para_to_owner
 
 
+def _build_para_to_comment_from_document(xml_bytes: bytes) -> dict[str, str]:
+    """
+    Build {paraId: comment_id} by scanning document.xml for paragraphs
+    that contain a <w:commentReference> element.
+    Used for EXTENDED documents where comments.xml paragraphs lack w14:paraId.
+    """
+    root = ET.fromstring(xml_bytes)
+    para_to_comment: dict[str, str] = {}
+
+    for para in root.iter(_tag(W, "p")):
+        para_id = para.get(_tag(W14, "paraId"))
+        if para_id is None:
+            continue
+        ref = para.find(".//" + _tag(W, "commentReference"))
+        if ref is not None:
+            cid = ref.get(_tag(W, "id"))
+            if cid:
+                para_to_comment[para_id] = cid
+
+    return para_to_comment
+
+
 def _apply_extended(
     comments: dict[str, Comment],
     para_to_comment: dict[str, str],
     xml_bytes: bytes,
 ) -> None:
-    """
-    Parse word/commentsExtended.xml and mutate comments in-place.
-
-    Each <w15:commentEx> carries:
-        w15:paraId        – identifies which comment this record belongs to
-        w15:paraIdParent  – present on replies; paraId of the parent comment
-        w15:done          – "1" if the thread is marked resolved
-
-    Used by both EXTENDED and MODERN (identical schema in both).
-    """
     root = ET.fromstring(xml_bytes)
 
     for ce in root.findall(_tag(W15, "commentEx")):
@@ -183,15 +222,31 @@ def _apply_extended(
         parent_id = ce.get(_tag(W15, "paraIdParent"))
         done = ce.get(_tag(W15, "done"), "0") == "1"
 
-        cid = para_to_comment.get(para_id)
-        if cid is None:
+        if para_id is None:
             continue
+
+        cid = para_to_comment.get(para_id)
+
+        # LibreOffice fallback: paraId is the comment w:id encoded as
+        # a little-endian 32-bit hex string e.g. "01000000" → id "1"
+        if cid is None:
+            try:
+                cid = str(int.from_bytes(bytes.fromhex(para_id), "little"))
+            except (ValueError, TypeError):
+                continue
+            if cid not in comments:
+                continue
 
         comments[cid].resolved = done
 
         if parent_id:
             parent_cid = para_to_comment.get(parent_id)
-            if parent_cid:
+            if parent_cid is None:
+                try:
+                    parent_cid = str(int.from_bytes(bytes.fromhex(parent_id), "little"))
+                except (ValueError, TypeError):
+                    parent_cid = None
+            if parent_cid and parent_cid in comments:
                 comments[cid].parent_id = parent_cid
 
 
@@ -213,55 +268,22 @@ def _parse_document_context(xml_bytes: bytes) -> dict[str, CommentContext]:
     """
     Parse word/document.xml and extract a CommentContext for each comment id.
 
-    Strategy
-    --------
-    We iterate every <w:p> paragraph element in document order.  Within each
-    paragraph, we traverse all descendants in DFS pre-order — the same order
-    they appear in the serialised XML — which gives us interleaved text and
-    comment-range markers in the correct sequence:
-
-        <w:r><w:t>Before </w:t></w:r>          char_pos advances to 7
-        <w:commentRangeStart w:id="1"/>         range 1 opens  @ char_pos=7
-        <w:r><w:t>Selected</w:t></w:r>          char_pos advances to 15
-        <w:commentRangeEnd   w:id="1"/>         range 1 closes @ char_pos=15
-
-    selected_text = paragraph_text[7:15] = "Selected".
-
-    Multi-paragraph ranges
-    ----------------------
-    Word allows a comment range to span paragraph boundaries.  When an open
-    range carries over to the next paragraph, we inject a "\n" separator into
-    both the selected-text accumulator and the joined paragraph_text string so
-    that character offsets remain consistent across both.
-
-    Offsets recorded at range-open / range-close are relative to their
-    respective paragraphs.  After collecting all paragraph texts, end-offsets
-    are converted to positions within the joined paragraph_text string.
+    We walk every <w:p> in document order and traverse descendants in DFS
+    pre-order, tracking char_pos as we encounter <w:t> elements so that
+    commentRangeStart/End markers give us exact character offsets.
     """
     root = ET.fromstring(xml_bytes)
 
-    # All paragraphs in the document, in document order.
-    # root.iter() gives DFS pre-order, covering body, table-cell, text-box
-    # paragraphs, etc.  <w:p> never contains descendant <w:p> elements in
-    # standard OOXML, so para.iter() is safe for single-paragraph traversal.
     para_elements: list[ET.Element] = list(root.iter(_tag(W, "p")))
 
-    # {cid: {"start_para": int, "start_char": int, "sel_chunks": list[str]}}
     open_ranges: dict[str, dict] = {}
-
-    # {cid: {"selected":   str,
-    #         "start_para": int, "start_char": int,
-    #         "end_para":   int, "end_char":   int}}
     completed: dict[str, dict] = {}
-
     para_texts: list[str] = []
 
     for para_idx, para in enumerate(para_elements):
         char_pos = 0
         para_text_parts: list[str] = []
 
-        # Ranges that are already open receive a paragraph separator so that
-        # selected_text and paragraph_text are built from the same characters.
         for acc in open_ranges.values():
             acc["sel_chunks"].append("\n")
 
@@ -286,7 +308,7 @@ def _parse_document_context(xml_bytes: bytes) -> dict[str, CommentContext]:
                         "start_para": acc["start_para"],
                         "start_char": acc["start_char"],
                         "end_para": para_idx,
-                        "end_char": char_pos,  # offset within this paragraph
+                        "end_char": char_pos,
                     }
 
             elif tag == _tag(W, "t"):
@@ -298,9 +320,6 @@ def _parse_document_context(xml_bytes: bytes) -> dict[str, CommentContext]:
 
         para_texts.append("".join(para_text_parts))
 
-    # ------------------------------------------------------------------
-    # Build CommentContext objects now that all para_texts are known.
-    # ------------------------------------------------------------------
     contexts: dict[str, CommentContext] = {}
 
     for cid, info in completed.items():
@@ -308,18 +327,12 @@ def _parse_document_context(xml_bytes: bytes) -> dict[str, CommentContext]:
         ep = info["end_para"]
 
         if sp == ep:
-            # Single-paragraph range: offsets are directly within para_texts[sp].
             para_text = para_texts[sp]
             sel_start = info["start_char"]
             sel_end = info["end_char"]
         else:
-            # Multi-paragraph: join with the same "\n" separators injected into
-            # sel_chunks so that character offsets stay consistent.
             para_text = "\n".join(para_texts[sp : ep + 1])
-            sel_start = info["start_char"]  # offset within para_texts[sp], which
-            # starts at position 0 in para_text
-            # Convert end_char (within para_texts[ep]) to an offset within para_text
-            # by summing lengths of all preceding paragraphs plus one "\n" each.
+            sel_start = info["start_char"]
             offset_to_ep = sum(len(para_texts[i]) + 1 for i in range(sp, ep))
             sel_end = offset_to_ep + info["end_char"]
 
@@ -349,63 +362,110 @@ def _build_tree(comments: dict[str, Comment]) -> list[Comment]:
 
 
 # ---------------------------------------------------------------------------
+# Debug helper — writes key XML structures to /tmp/extract_comments_debug.log
+# ---------------------------------------------------------------------------
+def _debug_dump(label: str, content: str, mode: str = "a") -> None:
+    with open("/tmp/extract_comments_debug.log", mode) as f:
+        f.write(f"\n{'=' * 60}\n{label}\n{'=' * 60}\n")
+        f.write(content)
+        f.write("\n")
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def extract_comments(docx_path: str) -> tuple[list[Comment], WordVersion]:
+type DocxSource = str | Path | io.IOBase
+
+
+def extract_comments(
+    docx: DocxSource, debug: bool = False
+) -> tuple[list[Comment], WordVersion]:
     """
     Extract all comments from a .docx file.
 
+    Parameters
+    ----------
+    docx  : path string, Path, or file-like object (e.g. st.UploadedFile)
+    debug : if True, writes raw XML structures to
+            /tmp/extract_comments_debug.log for troubleshooting
+
     Returns a list of top-level Comment objects (replies nested inside
     Comment.replies) and the detected WordVersion.
-
-    Every comment has a .context attribute (CommentContext) populated with
-    the selected text, containing paragraph(s), and overlapping sentence(s).
-    context is None only for comments anchored in headers, footers, or other
-    XML parts not covered by word/document.xml.
-
-    Version-specific behaviour
-    --------------------------
-    LEGACY   No resolved status or reply threading.  Returns flat list;
-             resolved=False and parent_id=None for all comments.
-
-    EXTENDED paraId→commentId mapping inferred from comments.xml, then
-             extended metadata applied from commentsExtended.xml.
-
-    MODERN   commentsIds.xml read for the authoritative paraId→ownerParaId
-             map, used to supplement the inferred mapping before applying
-             commentsExtended.xml.
     """
-    with zipfile.ZipFile(docx_path) as z:
+    with zipfile.ZipFile(docx) as z:
         names = z.namelist()
         version = detect_version(names)
 
-        if "word/comments.xml" not in names:
-            return [], version
+        # Read all relevant files up front — ZipFile members can only be
+        # read once per open(), so we materialise bytes here and reuse them.
+        comments_bytes = (
+            z.read("word/comments.xml") if "word/comments.xml" in names else b""
+        )
+        extended_bytes = (
+            z.read("word/commentsExtended.xml")
+            if "word/commentsExtended.xml" in names
+            else b""
+        )
+        ids_bytes = (
+            z.read("word/commentsIds.xml") if "word/commentsIds.xml" in names else b""
+        )
+        document_bytes = (
+            z.read("word/document.xml") if "word/document.xml" in names else b""
+        )
 
-        comments, para_to_comment = _parse_comments(z.read("word/comments.xml"))
-
-        if version == WordVersion.MODERN:
-            para_to_owner = _parse_comments_ids(z.read("word/commentsIds.xml"))
-            for para_id, owner_para_id in para_to_owner.items():
-                if para_id not in para_to_comment and owner_para_id in para_to_comment:
-                    para_to_comment[para_id] = para_to_comment[owner_para_id]
-            _apply_extended(
-                comments, para_to_comment, z.read("word/commentsExtended.xml")
+    if debug:
+        _debug_dump("version", version.name, mode="w")
+        if comments_bytes:
+            _debug_dump(
+                "comments.xml (first 3000 chars)", comments_bytes.decode("utf-8")[:3000]
+            )
+        if extended_bytes:
+            _debug_dump(
+                "commentsExtended.xml",
+                ET.tostring(ET.fromstring(extended_bytes), encoding="unicode"),
             )
 
-        elif version == WordVersion.EXTENDED:
-            _apply_extended(
-                comments, para_to_comment, z.read("word/commentsExtended.xml")
+    if not comments_bytes:
+        return [], version
+
+    comments, para_to_comment = _parse_comments(comments_bytes)
+
+    if debug:
+        _debug_dump("para_to_comment after _parse_comments", str(para_to_comment))
+
+    if version == WordVersion.MODERN:
+        para_to_owner = _parse_comments_ids(ids_bytes)
+        for para_id, owner_para_id in para_to_owner.items():
+            if para_id not in para_to_comment and owner_para_id in para_to_comment:
+                para_to_comment[para_id] = para_to_comment[owner_para_id]
+        _apply_extended(comments, para_to_comment, extended_bytes)
+
+    elif version == WordVersion.EXTENDED:
+        if document_bytes:
+            para_to_comment.update(_build_para_to_comment_from_document(document_bytes))
+        if debug:
+            _debug_dump(
+                "para_to_comment after _build_para_to_comment_from_document",
+                str(para_to_comment),
             )
+            ext_root = ET.fromstring(extended_bytes)
+            _debug_dump(
+                "commentsExtended paraId / paraIdParent pairs",
+                str(
+                    [
+                        (ce.get(f"{{{W15}}}paraId"), ce.get(f"{{{W15}}}paraIdParent"))
+                        for ce in ext_root.findall(_tag(W15, "commentEx"))
+                    ]
+                ),
+            )
+        _apply_extended(comments, para_to_comment, extended_bytes)
 
-        # LEGACY: nothing more to do for threading/resolved.
-
-        # Document context is version-independent.
-        if "word/document.xml" in names:
-            contexts = _parse_document_context(z.read("word/document.xml"))
-            for cid, ctx in contexts.items():
-                if cid in comments:
-                    comments[cid].context = ctx
+    # Document context is version-independent.
+    if document_bytes:
+        contexts = _parse_document_context(document_bytes)
+        for cid, ctx in contexts.items():
+            if cid in comments:
+                comments[cid].context = ctx
 
     return _build_tree(comments), version
 
@@ -417,7 +477,9 @@ if __name__ == "__main__":
     import sys
 
     path = sys.argv[1] if len(sys.argv) > 1 else "document.docx"
-    comments, version = extract_comments(path)
+    debug = "--debug" in sys.argv
+
+    comments, version = extract_comments(path, debug=debug)
 
     print(f"Format detected : {version.name}")
     print(f"Comments found  : {len(comments)}\n")
