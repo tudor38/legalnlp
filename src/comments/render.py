@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 from annotated_text import annotated_text
 from datetime import datetime
-from src.comments.extract import Comment, WordVersion, _is_libreoffice
+from src.comments.extract import Comment, WordVersion
 import altair as alt
 
 
@@ -19,7 +19,6 @@ def render_thread_depth(comments: list[Comment]) -> None:
         alt.Chart(df)
         .mark_bar()
         .encode(
-            # x=alt.X("replies:Q", title="Replies"),
             x=alt.X(
                 "replies:Q", title="Replies", axis=alt.Axis(tickMinStep=1, format="d")
             ),
@@ -30,9 +29,9 @@ def render_thread_depth(comments: list[Comment]) -> None:
                 legend=alt.Legend(title="Resolved"),
             ),
             tooltip=[
-                alt.Tooltip("author:N", title="Author"),
-                alt.Tooltip("text:N", title="Comment"),
-                alt.Tooltip("replies:Q", title="Replies"),
+                alt.Tooltip("author:N",   title="Author"),
+                alt.Tooltip("text:N",     title="Comment"),
+                alt.Tooltip("replies:Q",  title="Replies"),
                 alt.Tooltip("resolved:N", title="Resolved"),
             ],
         )
@@ -63,8 +62,8 @@ def _reformat_inline_dates(text: str) -> str:
     """
     LibreOffice embeds dates in reply text as (MM/DD/YYYY, HH:MM).
     Reformat to match our display standard: Month D, YYYY · H:MM AM/PM
+    Only applied when is_libreoffice=True is passed to render_comments.
     """
-
     def replace(m: re.Match) -> str:
         try:
             dt = datetime.strptime(m.group(0), "(%m/%d/%Y, %H:%M)")
@@ -76,7 +75,10 @@ def _reformat_inline_dates(text: str) -> str:
 
 
 def render_comments(
-    comments: list[Comment], version: WordVersion, order: list[str]
+    comments:       list[Comment],
+    version:        WordVersion,
+    order:          list[str],
+    is_libreoffice: bool = False,
 ) -> None:
     def render_paragraph_with_highlight(para: str, selected: str) -> None:
         idx = para.find(selected)
@@ -84,7 +86,7 @@ def render_comments(
             st.markdown(f"> {para}")
             return
         before = para[:idx]
-        after = para[idx + len(selected) :]
+        after  = para[idx + len(selected):]
         annotated_text(before, (selected, "", _highlight_color()), after)
 
     def render_elements(c: Comment) -> None:
@@ -92,14 +94,14 @@ def render_comments(
             match label:
                 case "Sentence" if c.context:
                     for sent in c.context.sentences:
-                        render_paragraph_with_highlight(sent, c.context.selected_text)
+                        render_paragraph_with_highlight(sent.text, c.context.selected_text)
                 case "Paragraph" if c.context:
                     with st.expander("📄 Paragraph"):
                         render_paragraph_with_highlight(
                             c.context.paragraph_text, c.context.selected_text
                         )
                 case "Comment":
-                    text = _reformat_inline_dates(c.text) if _is_libreoffice else c.text
+                    text = _reformat_inline_dates(c.text) if is_libreoffice else c.text
                     st.markdown(text)
 
     def render_reply(reply: Comment) -> None:
@@ -113,7 +115,6 @@ def render_comments(
     for i, comment in enumerate(comments, 1):
         status_badge = "✅ Resolved" if comment.resolved else "🔵 Open"
         with st.container(border=True):
-            # Header row
             col_num, col_meta = st.columns([1, 11])
             with col_num:
                 st.markdown(f"### {i}")

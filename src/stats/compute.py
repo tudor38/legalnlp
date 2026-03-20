@@ -34,19 +34,28 @@ def open_comment_ages(comments: list[Comment]) -> pd.DataFrame:
                 pass
     return pd.DataFrame(rows)
 
+def paragraph_comment_density(
+    comments: list[Comment], all_paragraphs: list[str]
+) -> pd.DataFrame:
+    comment_counts:  dict[str, int] = {}
+    resolved_counts: dict[str, int] = {}
 
-def paragraph_comment_density(comments: list[Comment]) -> pd.DataFrame:
-    rows = []
     for c in comments:
         if c.context and c.context.paragraph_text:
-            rows.append(
-                {
-                    "paragraph": c.context.paragraph_text[:80] + "…"
-                    if len(c.context.paragraph_text) > 80
-                    else c.context.paragraph_text,
-                    "full_paragraph": c.context.paragraph_text,
-                    "author": c.author,
-                    "resolved": c.resolved,
-                }
-            )
+            para = c.context.paragraph_text
+            comment_counts[para]  = comment_counts.get(para, 0) + 1
+            resolved_counts[para] = resolved_counts.get(para, 0) + int(c.resolved)
+
+    rows = []
+    for i, para in enumerate(all_paragraphs):
+        truncated = para[:80] + "…" if len(para) > 80 else para
+        rows.append({
+            "index":      i,
+            "paragraph":  truncated,
+            "full":       para,
+            "comments":   comment_counts.get(para, 0),
+            "resolved":   resolved_counts.get(para, 0),
+            "unresolved": comment_counts.get(para, 0) - resolved_counts.get(para, 0),
+        })
+
     return pd.DataFrame(rows)

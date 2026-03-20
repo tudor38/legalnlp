@@ -93,7 +93,7 @@ def render_open_comment_ages(comments: list[Comment]) -> None:
 def render_paragraph_heatmap(
     comments: list[Comment], all_paragraphs: list[str]
 ) -> None:
-    df = paragraph_comment_density(comments)
+    df = paragraph_comment_density(comments, all_paragraphs)
     if df.empty:
         st.caption("No paragraph data available.")
         return
