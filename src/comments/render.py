@@ -40,7 +40,7 @@ def render_thread_depth(comments: list[Comment]) -> None:
             # height=60 * len(df) + 60,
         )
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 
 def _format_date(iso: str) -> str:

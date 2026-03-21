@@ -41,7 +41,7 @@ def render_thread_depth(comments: list[Comment]) -> None:
         .properties(title="Thread Depth", height=40 * len(df) + 60)
     )
 
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 
 def render_resolution_rate(comments: list[Comment]) -> float:
@@ -186,7 +186,7 @@ def render_comment_summary(summary: CommentSummary) -> None:
 
     col_donut, col_stats = st.columns([2, 5])
     with col_donut:
-        st.altair_chart(donut, use_container_width=False)
+        st.altair_chart(donut, width='content')
     with col_stats:
         st.markdown(pills_html, unsafe_allow_html=True)
         st.markdown(timeline_html, unsafe_allow_html=True)
@@ -201,35 +201,30 @@ def render_redline_summary(summary: RedlineSummary) -> None:
     def fmt_days(d: float | None) -> str:
         return f"{d:.0f}" if d is not None else "—"
 
-    # --- Insertions vs deletions donut ---
-    donut_df = pd.DataFrame(
-        [
-            {"kind": "Insertions", "value": summary.insertions},
-            {"kind": "Deletions", "value": summary.deletions},
-        ]
-    )
+    donut_df = pd.DataFrame([
+        {"kind": "Redlined",     "value": summary.redlined_chars},
+        {"kind": "Unredlined",   "value": max(0, summary.total_chars - summary.redlined_chars)},
+    ])
 
     donut = (
         alt.Chart(donut_df)
         .mark_arc(innerRadius=50, outerRadius=80)
         .encode(
             theta=alt.Theta("value:Q"),
-            color=alt.Color(
-                "kind:N",
+            color=alt.Color("kind:N",
                 scale=alt.Scale(
-                    domain=["Insertions", "Deletions"],
-                    range=["#21c354", "#ff4b4b"],
+                    domain=["Redlined", "Unredlined"],
+                    range=["#ff4b4b", "#374151"],
                 ),
                 legend=None,
             ),
             tooltip=[
-                alt.Tooltip("kind:N", title="Kind"),
-                alt.Tooltip("value:Q", title="Count"),
+                alt.Tooltip("kind:N",  title="Kind"),
+                alt.Tooltip("value:Q", title="Characters"),
             ],
         )
-        .properties(width=220, height=220, title=f"{summary.total} Redlines")
+        .properties(width=220, height=220, title=f"{summary.redline_density:.1%} Redlined")
     )
-
     # --- Stat pills ---
     pills_html = f"""
     <style>
@@ -321,7 +316,7 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 
     col_donut, col_stats = st.columns([2, 5])
     with col_donut:
-        st.altair_chart(donut, use_container_width=False)
+        st.altair_chart(donut, width='content')
     with col_stats:
         st.markdown(pills_html, unsafe_allow_html=True)
         st.markdown(timeline_html, unsafe_allow_html=True)
@@ -392,7 +387,7 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 #         )
 #     )
 #
-#     st.altair_chart(chart, use_container_width=True)
+#     st.altair_chart(chart, width='stretch')
 # def render_comment_timeline(comments: list[Comment]) -> None:
 #     from datetime import datetime
 #
@@ -460,4 +455,4 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 #         .properties(title="Comment Timeline")
 #     )
 #
-#     st.altair_chart(chart, use_container_width=True)
+#     st.altair_chart(chart, width='stretch')
