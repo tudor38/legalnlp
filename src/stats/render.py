@@ -1,5 +1,5 @@
 from src.comments.extract import Comment, DocumentParagraphs
-from src.stats.compute import open_comment_ages, paragraph_comment_density
+from src.stats.compute import open_comment_ages, paragraph_comment_density, BoxPlotThresholds
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -10,6 +10,18 @@ import json
 import streamlit.components.v1 as components
 from src.stats.compute import RedlineSummary
 
+
+def _author_color_scale(df: pd.DataFrame) -> alt.Scale:
+    """Build a consistent color scale across all charts for the same dataset."""
+    authors = sorted(df["author"].unique().tolist())
+    # Altair's default categorical palette
+    palette = [
+        "#4c78a8", "#f58518", "#e45756", "#72b7b2",
+        "#54a24b", "#eeca3b", "#b279a2", "#ff9da6",
+        "#9d755d", "#bab0ac",
+    ]
+    colors = [palette[i % len(palette)] for i in range(len(authors))]
+    return alt.Scale(domain=authors, range=colors)
 
 def render_thread_depth(comments: list[Comment]) -> None:
     df = pd.DataFrame([c.to_row() for c in comments if c.replies])
@@ -41,7 +53,7 @@ def render_thread_depth(comments: list[Comment]) -> None:
         .properties(title="Thread Depth", height=40 * len(df) + 60)
     )
 
-    st.altair_chart(chart, width='stretch')
+    st.altair_chart(chart, width="stretch")
 
 
 def render_resolution_rate(comments: list[Comment]) -> float:
@@ -186,7 +198,7 @@ def render_comment_summary(summary: CommentSummary) -> None:
 
     col_donut, col_stats = st.columns([2, 5])
     with col_donut:
-        st.altair_chart(donut, width='content')
+        st.altair_chart(donut, width="content")
     with col_stats:
         st.markdown(pills_html, unsafe_allow_html=True)
         st.markdown(timeline_html, unsafe_allow_html=True)
@@ -201,17 +213,23 @@ def render_redline_summary(summary: RedlineSummary) -> None:
     def fmt_days(d: float | None) -> str:
         return f"{d:.0f}" if d is not None else "—"
 
-    donut_df = pd.DataFrame([
-        {"kind": "Redlined",   "value": summary.redlined_chars},
-        {"kind": "Unredlined", "value": max(0, summary.total_chars - summary.redlined_chars)},
-    ])
+    donut_df = pd.DataFrame(
+        [
+            {"kind": "Redlined", "value": summary.redlined_chars},
+            {
+                "kind": "Unredlined",
+                "value": max(0, summary.total_chars - summary.redlined_chars),
+            },
+        ]
+    )
 
     donut = (
         alt.Chart(donut_df)
         .mark_arc(innerRadius=50, outerRadius=80)
         .encode(
             theta=alt.Theta("value:Q"),
-            color=alt.Color("kind:N",
+            color=alt.Color(
+                "kind:N",
                 scale=alt.Scale(
                     domain=["Redlined", "Unredlined"],
                     range=["#ff4b4b", "#374151"],
@@ -219,11 +237,13 @@ def render_redline_summary(summary: RedlineSummary) -> None:
                 legend=None,
             ),
             tooltip=[
-                alt.Tooltip("kind:N",  title="Kind"),
+                alt.Tooltip("kind:N", title="Kind"),
                 alt.Tooltip("value:Q", title="Characters"),
             ],
         )
-        .properties(width=220, height=220, title=f"{summary.redline_density:.0%} Redlined")
+        .properties(
+            width=220, height=220, title=f"{summary.redline_density:.0%} Redlined"
+        )
     )
 
     pills_html = f"""
@@ -311,7 +331,7 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 
     col_donut, col_stats = st.columns([2, 5])
     with col_donut:
-        st.altair_chart(donut, width='content')
+        st.altair_chart(donut, width="content")
     with col_stats:
         st.markdown(pills_html, unsafe_allow_html=True)
         st.markdown(timeline_html, unsafe_allow_html=True)
@@ -319,3 +339,78 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 
 # def render_comment_timeline — commented out in original, preserved below
 # (omitted for brevity, unchanged from original)
+
+def render_age_boxplot(
+    df:         pd.DataFrame,
+    title:      str,
+) -> None:
+
+    if df.empty:
+        st.caption(f"No data for {title}.")
+        return
+
+    color_scale = _author_color_scale(df)
+
+    chart = (
+        alt.Chart(df)
+        .mark_boxplot(extent="min-max")
+        .encode(
+            x=alt.X("age_days:Q", title="Age (days)"),
+            y=alt.Y("author:N",   title=None),
+            color=alt.Color("author:N", scale=color_scale, legend=None),
+            tooltip=[
+                alt.Tooltip("author:N",   title="Author"),
+                alt.Tooltip("age_days:Q", title="Age (days)"),
+            ],
+        )
+        .properties(height=50 * df["author"].nunique() + 60)
+    )
+    st.markdown(
+        "**Comment Age Distribution**",
+        help=(
+            "This plot maps the **negotiation lifecycle**, highlighting the start-to-finish duration and "
+            "the 'middle 50%' where the most intensive revision activity occurred.\n\n"
+            "**What each element shows:**\n"
+            "- **Box:** the middle 50% of item ages for that reviewer\n"
+            "- **Line through the box:** the median age\n"
+            "- **Whiskers:** the oldest and newest items\n"
+            "- **Dots beyond the whiskers:** outliers, items unusually old or new\n\n"
+            "**What to look for:**\n"
+            "- **Wide boxes** signal activity spread over a long period\n"
+            "- **Outliers** may represent forgotten or contested items\n"
+            "- **Non-overlapping boxes** across reviewers indicate sequential rather than parallel review"
+        )
+    )
+    st.altair_chart(chart, width="stretch")
+
+
+
+def render_author_bar(df: pd.DataFrame, title: str) -> None:
+    if df.empty:
+        st.caption(f"No data for {title}.")
+        return
+
+    color_scale = _author_color_scale(df)
+
+    counts = (
+        df.groupby("author")
+        .size()
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+    )
+
+    chart = (
+        alt.Chart(counts)
+        .mark_bar()
+        .encode(
+            x=alt.X("count:Q", title="Count", axis=alt.Axis(tickMinStep=1, format="d")),
+            y=alt.Y("author:N", sort="-x", title=None),
+            color=alt.Color("author:N", scale=color_scale, legend=None),
+            tooltip=[
+                alt.Tooltip("author:N", title="Author"),
+                alt.Tooltip("count:Q", title="Count"),
+            ],
+        )
+        .properties(title=title, height=50 * len(counts) + 60)
+    )
+    st.altair_chart(chart, width="stretch")

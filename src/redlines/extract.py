@@ -37,7 +37,7 @@ nlp.add_pipe("sentencizer")
 # ---------------------------------------------------------------------------
 # Namespaces
 # ---------------------------------------------------------------------------
-W   = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -50,9 +50,9 @@ def _tag(ns: str, local: str) -> str:
 # Data model
 # ---------------------------------------------------------------------------
 class WordVersion(Enum):
-    LEGACY   = auto()
+    LEGACY = auto()
     EXTENDED = auto()
-    MODERN   = auto()
+    MODERN = auto()
 
 
 @dataclass
@@ -60,7 +60,7 @@ class Span:
     """A [start, end) character range, paragraph-relative."""
 
     start: int
-    end:   int
+    end: int
 
     def __len__(self) -> int:
         return self.end - self.start
@@ -81,21 +81,21 @@ class SentenceSpan:
 class RedlineContext:
     """Surrounding text context for a tracked change."""
 
-    para_idx:       int              # 0-based index in final document (moveFrom excluded)
+    para_idx: int  # 0-based index in final document (moveFrom excluded)
     paragraph_text: str
-    sentences:      list[SentenceSpan]
+    sentences: list[SentenceSpan]
 
 
 @dataclass
 class Redline:
-    id:         str
-    author:     str
-    date:       str
-    kind:       Literal["insertion", "deletion"]
-    text:       str
-    char_start: int   # paragraph-relative, inclusive
-    char_end:   int   # paragraph-relative, exclusive
-    context:    Optional[RedlineContext] = None
+    id: str
+    author: str
+    date: str
+    kind: Literal["insertion", "deletion"]
+    text: str
+    char_start: int  # paragraph-relative, inclusive
+    char_end: int  # paragraph-relative, exclusive
+    context: Optional[RedlineContext] = None
 
     @property
     def span(self) -> Span:
@@ -107,9 +107,11 @@ class Redline:
             for f in fields(self)
             if f.name not in ("context",)
         } | {
-            "para_idx":  self.context.para_idx        if self.context else None,
-            "paragraph": self.context.paragraph_text  if self.context else None,
-            "sentences": [s.text for s in self.context.sentences] if self.context else [],
+            "para_idx": self.context.para_idx if self.context else None,
+            "paragraph": self.context.paragraph_text if self.context else None,
+            "sentences": [s.text for s in self.context.sentences]
+            if self.context
+            else [],
         }
 
 
@@ -117,9 +119,9 @@ class Redline:
 class MoveContext:
     """Text context for one side of a move operation."""
 
-    para_idx:       int              # index in final document (to) or xml_order_idx (from)
+    para_idx: int  # index in final document (to) or xml_order_idx (from)
     paragraph_text: str
-    sentences:      list[SentenceSpan]
+    sentences: list[SentenceSpan]
 
 
 @dataclass
@@ -136,25 +138,26 @@ class Move:
     Moves are atomic: text must be identical on both sides.
     If nested <w:ins> or <w:del> are present, the pair is dropped.
     """
-    id:            str
-    author:        str
-    date:          str
-    text:          str
-    from_para_idx: int          # key in DocumentParagraphs.moved_from
-    to_para_idx:   int          # index in DocumentParagraphs.paragraphs
-    from_context:  MoveContext
-    to_context:    MoveContext
+
+    id: str
+    author: str
+    date: str
+    text: str
+    from_para_idx: int  # key in DocumentParagraphs.moved_from
+    to_para_idx: int  # index in DocumentParagraphs.paragraphs
+    from_context: MoveContext
+    to_context: MoveContext
 
     def to_row(self) -> dict:
         return {
-            "id":            self.id,
-            "author":        self.author,
-            "date":          self.date,
-            "text":          self.text,
+            "id": self.id,
+            "author": self.author,
+            "date": self.date,
+            "text": self.text,
             "from_para_idx": self.from_para_idx,
-            "to_para_idx":   self.to_para_idx,
+            "to_para_idx": self.to_para_idx,
             "from_paragraph": self.from_context.paragraph_text,
-            "to_paragraph":   self.to_context.paragraph_text,
+            "to_paragraph": self.to_context.paragraph_text,
         }
 
 
@@ -163,7 +166,7 @@ class Move:
 # ---------------------------------------------------------------------------
 def detect_version(zip_names: list[str]) -> WordVersion:
     has_extended = "word/commentsExtended.xml" in zip_names
-    has_ids      = "word/commentsIds.xml"      in zip_names
+    has_ids = "word/commentsIds.xml" in zip_names
     if has_extended and has_ids:
         return WordVersion.MODERN
     if has_extended:
@@ -189,9 +192,7 @@ def _in_move_from(elem: ET.Element, parent_map: dict) -> bool:
     return False
 
 
-def _nearest_move_ancestor(
-    elem: ET.Element, parent_map: dict
-) -> Optional[ET.Element]:
+def _nearest_move_ancestor(elem: ET.Element, parent_map: dict) -> Optional[ET.Element]:
     """Return the nearest <w:moveFrom> or <w:moveTo> ancestor, or None."""
     current = elem
     while current in parent_map:
@@ -230,11 +231,11 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
     Only non-moveFrom paragraphs are enumerated so that para_idx values
     align with DocumentParagraphs.paragraphs indices.
     """
-    root       = ET.fromstring(xml_bytes)
+    root = ET.fromstring(xml_bytes)
     parent_map = _build_parent_map(root)
 
-    redlines:     list[Redline] = []
-    para_texts:   list[str]     = []
+    redlines: list[Redline] = []
+    para_texts: list[str] = []
     change_spans: dict[str, dict] = {}
 
     # Enumerate only final-document paragraphs (skip moveFrom)
@@ -243,16 +244,16 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
         if _in_move_from(para, parent_map):
             continue
 
-        char_pos         = 0
+        char_pos = 0
         para_text_parts: list[str] = []
 
         for elem in para.iter():
             tag = elem.tag
 
             if tag in (_tag(W, "ins"), _tag(W, "del")):
-                rid    = elem.get(_tag(W, "id"))
+                rid = elem.get(_tag(W, "id"))
                 author = elem.get(_tag(W, "author"), "")
-                date   = elem.get(_tag(W, "date"),   "")
+                date = elem.get(_tag(W, "date"), "")
                 kind: Literal["insertion", "deletion"] = (
                     "insertion" if tag == _tag(W, "ins") else "deletion"
                 )
@@ -263,14 +264,21 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
                     continue
 
                 change_spans[rid] = {
-                    "start":    char_pos,
-                    "end":      char_pos + len(text),
+                    "start": char_pos,
+                    "end": char_pos + len(text),
                     "para_idx": para_idx,
                 }
-                redlines.append(Redline(
-                    id=rid, author=author, date=date, kind=kind, text=text,
-                    char_start=char_pos, char_end=char_pos + len(text),
-                ))
+                redlines.append(
+                    Redline(
+                        id=rid,
+                        author=author,
+                        date=date,
+                        kind=kind,
+                        text=text,
+                        char_start=char_pos,
+                        char_end=char_pos + len(text),
+                    )
+                )
 
             elif tag == _tag(W, "t"):
                 t = elem.text or ""
@@ -291,9 +299,9 @@ def _parse_redlines(xml_bytes: bytes) -> list[Redline]:
             continue
         para_text = para_texts[span["para_idx"]]
         rid_to_redline[rid].context = RedlineContext(
-            para_idx       = span["para_idx"],
-            paragraph_text = para_text,
-            sentences      = _find_sentences_containing(para_text, span["start"], span["end"]),
+            para_idx=span["para_idx"],
+            paragraph_text=para_text,
+            sentences=_find_sentences_containing(para_text, span["start"], span["end"]),
         )
 
     return redlines
@@ -304,117 +312,110 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
     Extract validated paragraph moves from document.xml.
 
     A move pair is only kept if:
-      1. Both moveFrom and moveTo sides exist for the same w:id
-      2. Neither side contains nested <w:ins> or <w:del>
-      3. The text extracted from both sides is identical
+      1. Both <w:moveFrom> and <w:moveTo> exist for the same w:id
+      2. The final rendered text from both sides is identical
+
+    Nested <w:ins> / <w:del> inside the move do not disqualify it —
+    only the net rendered text matters. This means a paragraph with
+    tracked edits that was moved is still counted as a move, as long
+    as the text at the source and destination match after edits are
+    resolved.
+
+    Redlines inside the moved paragraph are counted only at the
+    destination (to_para_idx) by _parse_redlines, which skips all
+    <w:moveFrom> paragraphs. No double-counting occurs.
 
     Indices:
       from_para_idx : xml_order_idx (counts all <w:p> including moveFrom)
       to_para_idx   : index in final document paragraphs (moveFrom excluded)
     """
-    root       = ET.fromstring(xml_bytes)
+    root = ET.fromstring(xml_bytes)
     parent_map = _build_parent_map(root)
 
-    # {move_id: info_dict}
     move_info: dict[str, dict] = {}
 
-    final_idx = 0   # index in final document (moveFrom excluded)
-    xml_idx   = 0   # index counting all <w:p> in XML order
+    final_idx = 0
+    xml_idx = 0
 
     for para in root.iter(_tag(W, "p")):
         anc = _nearest_move_ancestor(para, parent_map)
 
         if anc is not None and anc.tag == _tag(W, "moveFrom"):
             move_id = anc.get(_tag(W, "id"))
-            author  = anc.get(_tag(W, "author"), "")
-            date    = anc.get(_tag(W, "date"),   "")
+            author = anc.get(_tag(W, "author"), "")
+            date = anc.get(_tag(W, "date"), "")
 
-            # Any nested ins/del disqualifies this pair
-            has_edits = any(
-                e.tag in (_tag(W, "ins"), _tag(W, "del"))
-                for e in anc.iter()
-                if e is not anc
-            )
-
-            # moveFrom text lives in <w:delText>
-            text      = "".join(t.text or "" for t in para.iter(_tag(W, "delText")))
-            para_text = text   # moveFrom paragraph IS the moved text
+            # Use all <w:t> for rendered text — this resolves nested edits
+            # so the comparison against moveTo text is apples-to-apples
+            text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
+            para_text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
 
             if move_id:
                 info = move_info.setdefault(move_id, {})
-                info.update({
-                    "from_xml_idx":   xml_idx,
-                    "from_text":      text,
-                    "from_para_text": para_text,
-                    "has_from_edits": has_edits,
-                    "author":         author,
-                    "date":           date,
-                })
+                info.update(
+                    {
+                        "from_xml_idx": xml_idx,
+                        "from_text": text,
+                        "from_para_text": para_text,
+                        "author": author,
+                        "date": date,
+                    }
+                )
             xml_idx += 1
 
         elif anc is not None and anc.tag == _tag(W, "moveTo"):
             move_id = anc.get(_tag(W, "id"))
 
-            has_edits = any(
-                e.tag in (_tag(W, "ins"), _tag(W, "del"))
-                for e in anc.iter()
-                if e is not anc
-            )
-
-            # moveTo text lives in <w:t>
-            text      = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
+            text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
             para_text = text
 
             if move_id:
                 info = move_info.setdefault(move_id, {})
-                info.update({
-                    "to_final_idx":  final_idx,
-                    "to_text":       text,
-                    "to_para_text":  para_text,
-                    "has_to_edits":  has_edits,
-                })
+                info.update(
+                    {
+                        "to_final_idx": final_idx,
+                        "to_text": text,
+                        "to_para_text": para_text,
+                    }
+                )
             final_idx += 1
-            xml_idx   += 1
+            xml_idx += 1
 
         else:
             final_idx += 1
-            xml_idx   += 1
+            xml_idx += 1
 
-    # Build Move objects, validating each pair
     moves: list[Move] = []
     for move_id, info in move_info.items():
-        # Both sides must be present
         if "from_text" not in info or "to_text" not in info:
             continue
-        # No nested edits on either side
-        if info.get("has_from_edits") or info.get("has_to_edits"):
-            continue
-        # Text must be identical
         if info["from_text"] != info["to_text"]:
             continue
 
-        text          = info["from_text"]
+        text = info["from_text"]
         from_para_txt = info["from_para_text"]
-        to_para_txt   = info["to_para_text"]
+        to_para_txt = info["to_para_text"]
 
-        moves.append(Move(
-            id            = move_id,
-            author        = info["author"],
-            date          = info["date"],
-            text          = text,
-            from_para_idx = info["from_xml_idx"],
-            to_para_idx   = info["to_final_idx"],
-            from_context  = MoveContext(
-                para_idx       = info["from_xml_idx"],
-                paragraph_text = from_para_txt,
-                sentences      = _find_sentences_containing(from_para_txt, 0, len(text)),
-            ),
-            to_context = MoveContext(
-                para_idx       = info["to_final_idx"],
-                paragraph_text = to_para_txt,
-                sentences      = _find_sentences_containing(to_para_txt, 0, len(text)),
-            ),
-        ))
+        moves.append(
+            Move(
+                id=move_id,
+                author=info["author"],
+                date=info["date"],
+                text=text,
+                from_para_idx=info["from_xml_idx"],
+                to_para_idx=info["to_final_idx"],
+                from_context=MoveContext(
+                    para_idx=info["from_xml_idx"],
+                    paragraph_text=from_para_txt,
+                    sentences=_find_sentences_containing(from_para_txt, 0, len(text)),
+                ),
+                to_context=MoveContext(
+                    para_idx=info["to_final_idx"],
+                    paragraph_text=to_para_txt,
+                    sentences=_find_sentences_containing(to_para_txt, 0, len(text)),
+                ),
+            )
+        )
 
     return moves
 
@@ -431,9 +432,11 @@ def extract_redlines(docx: DocxSource) -> tuple[list[Redline], WordVersion]:
     para_idx values index into DocumentParagraphs.paragraphs.
     """
     with zipfile.ZipFile(docx) as z:
-        names          = z.namelist()
-        version        = detect_version(names)
-        document_bytes = z.read("word/document.xml") if "word/document.xml" in names else b""
+        names = z.namelist()
+        version = detect_version(names)
+        document_bytes = (
+            z.read("word/document.xml") if "word/document.xml" in names else b""
+        )
 
     if not document_bytes:
         return [], version
@@ -449,9 +452,11 @@ def extract_moves(docx: DocxSource) -> tuple[list[Move], WordVersion]:
     to_para_idx   indexes into DocumentParagraphs.paragraphs.
     """
     with zipfile.ZipFile(docx) as z:
-        names          = z.namelist()
-        version        = detect_version(names)
-        document_bytes = z.read("word/document.xml") if "word/document.xml" in names else b""
+        names = z.namelist()
+        version = detect_version(names)
+        document_bytes = (
+            z.read("word/document.xml") if "word/document.xml" in names else b""
+        )
 
     if not document_bytes:
         return [], version
