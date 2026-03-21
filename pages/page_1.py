@@ -4,7 +4,7 @@ from datetime import datetime
 
 from src.comments.extract import extract_comments, extract_paragraphs
 from src.comments.render import render_comments
-from src.redlines.extract import extract_redlines
+from src.redlines.extract import extract_redlines, extract_moves
 from src.stats.compute import comment_summary, redline_summary
 from src.stats.render import render_comment_summary, render_redline_summary
 
@@ -13,11 +13,11 @@ from src.stats.render import render_comment_summary, render_redline_summary
 # Session state — initialise permanent keys once
 # ---------------------------------------------------------------------------
 DEFAULTS: dict = {
-    "p1_is_closed":    False,
-    "p1_closed_date":  None,
-    "p1_order":        ["Sentence", "Comment"],
-    "p1_file_bytes":   None,
-    "p1_file_name":    None,
+    "p1_is_closed":   False,
+    "p1_closed_date": None,
+    "p1_order":       ["Sentence", "Comment"],
+    "p1_file_bytes":  None,
+    "p1_file_name":   None,
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -62,11 +62,24 @@ def _latest_date(comments, redlines) -> datetime | None:
 
 
 def _load_document(file_bytes: bytes) -> tuple:
-    """Extract all data from file bytes, creating fresh BytesIO for each read."""
+    """
+    Extract all data from file bytes, creating a fresh BytesIO for each call.
+
+    Returns
+    -------
+    comments       : list[Comment]
+    version        : WordVersion
+    redlines       : list[Redline]
+    moves          : list[Move]
+    doc_paragraphs : DocumentParagraphs
+                     .paragraphs — final document paragraph texts (moveFrom excluded)
+                     .moved_from — xml_order_idx → text for moved-away paragraphs
+    """
     comments, version = extract_comments(io.BytesIO(file_bytes))
     redlines, _       = extract_redlines(io.BytesIO(file_bytes))
-    all_paragraphs    = extract_paragraphs(io.BytesIO(file_bytes))
-    return comments, version, redlines, all_paragraphs
+    moves, _          = extract_moves(io.BytesIO(file_bytes))
+    doc_paragraphs    = extract_paragraphs(io.BytesIO(file_bytes))
+    return comments, version, redlines, moves, doc_paragraphs
 
 
 def _sidebar_controls(comments, redlines) -> tuple[list[str], datetime | None]:
@@ -112,9 +125,6 @@ def _sidebar_controls(comments, redlines) -> tuple[list[str], datetime | None]:
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
-
-# File uploader — always rendered so user can change the file
-# st.session_state["_p1_uploaded_file"] = None  # widget key always starts fresh
 st.sidebar.file_uploader(
     "Choose a file",
     type=["docx", "doc"],
@@ -122,13 +132,12 @@ st.sidebar.file_uploader(
     on_change=_store_uploaded_file,
 )
 
-# Use stored bytes if available
 file_bytes = st.session_state["p1_file_bytes"]
 
 # selection = st.pills("Show", ["Overview", "Comments"], selection_mode="single")
 
 if file_bytes:
-    comments, version, redlines, all_paragraphs = _load_document(file_bytes)
+    comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
     order, reference_date = _sidebar_controls(comments, redlines)
 
     # match selection:
@@ -139,7 +148,7 @@ if file_bytes:
     )
     st.markdown("## Redlines")
     render_redline_summary(
-        redline_summary(redlines, all_paragraphs, reference_date=reference_date)
+        redline_summary(redlines, doc_paragraphs.paragraphs, reference_date=reference_date)
     )
 
         # case "Comments":
