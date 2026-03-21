@@ -223,7 +223,7 @@ def render_redline_summary(summary: RedlineSummary) -> None:
                 alt.Tooltip("value:Q", title="Characters"),
             ],
         )
-        .properties(width=220, height=220, title=f"{summary.redline_density:.1%} Redlined")
+        .properties(width=220, height=220, title=f"{summary.redline_density:.0%} Redlined")
     )
     # --- Stat pills ---
     pills_html = f"""
@@ -287,7 +287,7 @@ def render_redline_summary(summary: RedlineSummary) -> None:
         </div>
         <div class="pill">
             <div class="pill-label">Redline Density</div>
-            <div class="pill-value">{summary.redline_density:.1%}</div>
+            <div class="pill-value">{summary.redline_density:.0%}</div>
         </div>
     </div>
     """
