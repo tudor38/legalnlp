@@ -8,7 +8,6 @@ from src.stats.compute import (
     comment_ages_df,
     redline_ages_df,
     move_ages_df,
-    BoxPlotThresholds,
 )
 from src.stats.render import (
     render_age_boxplot,
@@ -115,16 +114,8 @@ def _sidebar_controls(comments, redlines) -> datetime | None:
         reference_date = datetime.combine(closed_date, datetime.min.time())
         reference_date += timedelta(days=1)
 
-    st.sidebar.markdown("### Thresholds")
-    stale_warning = st.sidebar.number_input("Stale (red, days)",    value=90, min_value=1)
-    stale_caution = st.sidebar.number_input("Caution (yellow, days)", value=45,  min_value=1)
-    spread_wide   = st.sidebar.number_input("Wide spread (days)",   value=30,  min_value=1)
-    thresholds = BoxPlotThresholds(
-        stale_warning_days = stale_warning,
-        stale_caution_days = stale_caution,
-        spread_wide_days   = spread_wide,
-    )
     return reference_date
+
 
 # ---------------------------------------------------------------------------
 # Page
@@ -153,14 +144,15 @@ if file_bytes:
             earliest = c_df["date"].min().strftime("%B %-d, %Y")
             latest = c_df["date"].max().strftime("%B %-d, %Y")
             st.caption(f"{earliest} → {latest}")
-
-        total = len(comments)
+        total    = len(comments)
+        replies  = sum(len(c.replies) for c in comments)
         resolved = sum(1 for c in comments if c.resolved)
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total", total)
-        col2.metric("Open", total - resolved)
-        col3.metric("Resolved", resolved)
 
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Comments",  total + replies)
+        col2.metric("Replies",   replies)
+        col3.metric("Open",      total - resolved)
+        col4.metric("Resolved",  resolved)
 
         render_author_bar(c_df, "Volume by Author")
         render_age_boxplot(c_df, "Age Distribution")

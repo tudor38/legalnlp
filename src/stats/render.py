@@ -1,13 +1,10 @@
-from src.comments.extract import Comment, DocumentParagraphs
-from src.stats.compute import open_comment_ages, paragraph_comment_density, BoxPlotThresholds
+from src.comments.extract import Comment
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
 
 from src.stats.compute import CommentSummary
-import json
-import streamlit.components.v1 as components
 from src.stats.compute import RedlineSummary
 
 
@@ -16,12 +13,20 @@ def _author_color_scale(df: pd.DataFrame) -> alt.Scale:
     authors = sorted(df["author"].unique().tolist())
     # Altair's default categorical palette
     palette = [
-        "#4c78a8", "#f58518", "#e45756", "#72b7b2",
-        "#54a24b", "#eeca3b", "#b279a2", "#ff9da6",
-        "#9d755d", "#bab0ac",
+        "#4c78a8",
+        "#f58518",
+        "#e45756",
+        "#72b7b2",
+        "#54a24b",
+        "#eeca3b",
+        "#b279a2",
+        "#ff9da6",
+        "#9d755d",
+        "#bab0ac",
     ]
     colors = [palette[i % len(palette)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
+
 
 def render_thread_depth(comments: list[Comment]) -> None:
     df = pd.DataFrame([c.to_row() for c in comments if c.replies])
@@ -72,7 +77,6 @@ def render_resolution_rate(comments: list[Comment]) -> float:
 
 
 def render_comment_summary(summary: CommentSummary) -> None:
-    from datetime import datetime
 
     def fmt_date(dt: datetime | None) -> str:
         return dt.strftime("%B %-d, %Y") if dt else "—"
@@ -205,7 +209,6 @@ def render_comment_summary(summary: CommentSummary) -> None:
 
 
 def render_redline_summary(summary: RedlineSummary) -> None:
-    from datetime import datetime
 
     def fmt_date(dt: datetime | None) -> str:
         return dt.strftime("%B %-d, %Y") if dt else "—"
@@ -340,9 +343,10 @@ def render_redline_summary(summary: RedlineSummary) -> None:
 # def render_comment_timeline — commented out in original, preserved below
 # (omitted for brevity, unchanged from original)
 
+
 def render_age_boxplot(
-    df:         pd.DataFrame,
-    title:      str,
+    df: pd.DataFrame,
+    title: str,
 ) -> None:
 
     if df.empty:
@@ -356,10 +360,10 @@ def render_age_boxplot(
         .mark_boxplot(extent="min-max")
         .encode(
             x=alt.X("age_days:Q", title="Age (days)"),
-            y=alt.Y("author:N",   title=None),
+            y=alt.Y("author:N", title=None),
             color=alt.Color("author:N", scale=color_scale, legend=None),
             tooltip=[
-                alt.Tooltip("author:N",   title="Author"),
+                alt.Tooltip("author:N", title="Author"),
                 alt.Tooltip("age_days:Q", title="Age (days)"),
             ],
         )
@@ -379,10 +383,9 @@ def render_age_boxplot(
             "- **Wide boxes** signal activity spread over a long period\n"
             "- **Outliers** may represent forgotten or contested items\n"
             "- **Non-overlapping boxes** across reviewers indicate sequential rather than parallel review"
-        )
+        ),
     )
     st.altair_chart(chart, width="stretch")
-
 
 
 def render_author_bar(df: pd.DataFrame, title: str) -> None:

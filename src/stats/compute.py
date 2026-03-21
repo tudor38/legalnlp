@@ -23,20 +23,31 @@ def thread_depth(comments: list[Comment]) -> pd.DataFrame:
     return threaded.sort_values("replies", ascending=False).reset_index(drop=True)
 
 
-def open_comment_ages(
+def comment_ages_df(
     comments: list[Comment],
     reference_date: datetime | None = None,
 ) -> pd.DataFrame:
-    now = reference_date or datetime.now()
+    now  = reference_date or datetime.now()
     rows = []
+
+    def _add(c: Comment, kind: str) -> None:
+        try:
+            dt = datetime.fromisoformat(c.date.rstrip("Z"))
+            rows.append({
+                "author":   c.author,
+                "age_days": (now - dt).days,
+                "date":     dt,
+                "resolved": c.resolved,
+                "kind":     kind,
+            })
+        except ValueError:
+            pass
+
     for c in comments:
-        if not c.resolved:
-            try:
-                dt = datetime.fromisoformat(c.date.rstrip("Z"))
-                age = (now - dt).days
-                rows.append({**c.to_row(), "age_days": age})
-            except ValueError:
-                pass
+        _add(c, "comment")
+        for reply in c.replies:
+            _add(reply, "reply")
+
     return pd.DataFrame(rows)
 
 
@@ -303,28 +314,6 @@ def time_bin(dates: list[datetime]) -> str:
     return "month"
 
 
-def comment_ages_df(
-    comments: list[Comment],
-    reference_date: datetime | None = None,
-) -> pd.DataFrame:
-    now = reference_date or datetime.now()
-    rows = []
-    for c in comments:
-        try:
-            dt = datetime.fromisoformat(c.date.rstrip("Z"))
-            rows.append(
-                {
-                    "author": c.author,
-                    "age_days": (now - dt).days,
-                    "date": dt,
-                    "resolved": c.resolved,
-                }
-            )
-        except ValueError:
-            pass
-    return pd.DataFrame(rows)
-
-
 def redline_ages_df(
     redlines: list[Redline],
     reference_date: datetime | None = None,
@@ -369,9 +358,3 @@ def move_ages_df(
         except ValueError:
             pass
     return pd.DataFrame(rows)
-
-@dataclass
-class BoxPlotThresholds:
-    stale_warning_days:  int = 90  # median above this → red flag
-    stale_caution_days:  int = 45   # median above this → caution
-    spread_wide_days:    int = 30   # IQR above this → coordination gap
