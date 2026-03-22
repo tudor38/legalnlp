@@ -12,6 +12,7 @@ from src.stats.compute import (
 from src.stats.render import (
     render_age_boxplot,
     render_author_bar,
+    render_comment_metrics,
 )
 
 
@@ -89,18 +90,18 @@ def _load_document(file_bytes: bytes) -> tuple:
     return comments, version, redlines, moves, doc_paragraphs
 
 
-def _sidebar_controls(comments, redlines) -> datetime | None:
+def _sidebar_controls(comments, redlines) -> datetime:
     """Render sidebar controls. Returns reference_date."""
-    st.sidebar.markdown("### Document")
 
     st.session_state["_p1_is_closed"] = st.session_state["p1_is_closed"]
     is_closed = st.sidebar.toggle(
         "Matter is closed",
         key="_p1_is_closed",
+        value=False,
         on_change=_store_is_closed,
+        help="Toggle ON if the document is part of a closed matter. This setting affects date calculations.",
     )
 
-    reference_date = None
     if is_closed:
         latest = _latest_date(comments, redlines)
         default = latest.date() if latest else datetime.today().date()
@@ -111,10 +112,9 @@ def _sidebar_controls(comments, redlines) -> datetime | None:
             key="_p1_closed_date",
             on_change=_store_closed_date,
         )
-        reference_date = datetime.combine(closed_date, datetime.min.time())
-        reference_date += timedelta(days=1)
+        return datetime.combine(closed_date, datetime.min.time()) + timedelta(days=1)
 
-    return reference_date
+    return datetime.now()
 
 
 # ---------------------------------------------------------------------------
@@ -142,40 +142,40 @@ if file_bytes:
     with tab_c:
         if not c_df.empty:
             earliest = c_df["date"].min().strftime("%B %-d, %Y")
-            latest = c_df["date"].max().strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {latest}")
-        total    = len(comments)
-        replies  = sum(len(c.replies) for c in comments)
-        resolved = sum(1 for c in comments if c.resolved)
+            end = reference_date.strftime("%B %-d, %Y")
+            st.caption(f"{earliest} → {end}")
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Comments",  total + replies)
-        col2.metric("Replies",   replies)
-        col3.metric("Open",      total - resolved)
-        col4.metric("Resolved",  resolved)
+        total = len(comments)
+        replies = sum(len(c.replies) for c in comments)
+        resolved = sum(1 for c in comments if c.resolved) + sum(
+            1 for c in comments for r in c.replies if r.resolved
+        )
 
-        render_author_bar(c_df, "Volume by Author")
+        render_comment_metrics(total + replies, resolved)
+        render_author_bar(c_df, "Count by Author")
         render_age_boxplot(c_df, "Age Distribution")
 
     with tab_r:
         if not r_df.empty:
             earliest = r_df["date"].min().strftime("%B %-d, %Y")
-            latest = r_df["date"].max().strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {latest}")
+            end = reference_date.strftime("%B %-d, %Y")
+            st.caption(f"{earliest} → {end}")
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Total", len(redlines))
         col2.metric("Insertions", sum(1 for r in redlines if r.kind == "insertion"))
         col3.metric("Deletions", sum(1 for r in redlines if r.kind == "deletion"))
 
-        render_author_bar(r_df, "Volume by Author")
+        render_author_bar(r_df, "Count by Author")
         render_age_boxplot(r_df, "Age Distribution")
 
     with tab_m:
         if not m_df.empty:
             earliest = m_df["date"].min().strftime("%B %-d, %Y")
-            latest = m_df["date"].max().strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {latest}")
+            end = reference_date.strftime("%B %-d, %Y")
+            st.caption(f"{earliest} → {end}")
+
         st.metric("Total Moves", len(moves))
 
-        render_author_bar(m_df, "Move Volume by Author")
+        render_author_bar(m_df, "Move Count by Author")
         render_age_boxplot(m_df, "Move Age Distribution")

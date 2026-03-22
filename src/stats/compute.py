@@ -27,19 +27,21 @@ def comment_ages_df(
     comments: list[Comment],
     reference_date: datetime | None = None,
 ) -> pd.DataFrame:
-    now  = reference_date or datetime.now()
+    now = reference_date or datetime.now()
     rows = []
 
     def _add(c: Comment, kind: str) -> None:
         try:
             dt = datetime.fromisoformat(c.date.rstrip("Z"))
-            rows.append({
-                "author":   c.author,
-                "age_days": (now - dt).days,
-                "date":     dt,
-                "resolved": c.resolved,
-                "kind":     kind,
-            })
+            rows.append(
+                {
+                    "author": c.author,
+                    "age_days": (now - dt).days,
+                    "date": dt,
+                    "resolved": c.resolved,
+                    "kind": kind,
+                }
+            )
         except ValueError:
             pass
 
