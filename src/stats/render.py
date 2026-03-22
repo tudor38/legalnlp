@@ -133,7 +133,16 @@ def render_comment_metrics(
         tile.metric(label, value, delta=delta)
 
 
-def render_comment_timeline(df: pd.DataFrame, title: str) -> None:
+def render_comment_timeline(
+    df: pd.DataFrame,
+    title: str,
+    expanded_view_key: str = "_expanded_view",
+    expand_all_key: str = "_expand_all",
+    show_fields_key: str = "_show_fields",
+    on_expanded_view=None,
+    on_expand_all=None,
+    on_show_fields=None,
+) -> None:
     if df.empty:
         st.caption(f"No data for {title}.")
         return
@@ -203,7 +212,16 @@ def render_comment_timeline(df: pd.DataFrame, title: str) -> None:
     col5.metric("Resolved", f"{resolved_sel}")
 
     display = selected[
-        ["author", "date", "kind", "resolved", "comment", "selected", "sentence", "paragraph"]
+        [
+            "author",
+            "date",
+            "kind",
+            "resolved",
+            "comment",
+            "selected",
+            "sentence",
+            "paragraph",
+        ]
     ].copy()
 
     display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(
@@ -212,30 +230,50 @@ def render_comment_timeline(df: pd.DataFrame, title: str) -> None:
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
     col_view, col_expand = st.columns([1, 1])
-    expanded_view = col_view.toggle("Expanded view", value=False)
-    expand_all    = col_expand.toggle("Expand all", value=False) if expanded_view else False
+    expanded_view = col_view.toggle(
+        "Expanded view",
+        key=expanded_view_key,
+        on_change=on_expanded_view,
+    )
+    expand_all = (
+        col_expand.toggle(
+            "Expand all",
+            key=expand_all_key,
+            on_change=on_expand_all,
+        )
+        if expanded_view
+        else False
+    )
 
-    ALL_FIELDS     = ["Resolved", "Comment", "Selected", "Sentence", "Paragraph"]
-    DEFAULT_FIELDS = ["Resolved", "Comment", "Sentence"]
-    show_fields    = st.multiselect(
+    ALL_FIELDS = ["Resolved", "Comment", "Selected", "Sentence", "Paragraph"]
+    show_fields = st.multiselect(
         "Fields to show",
         options=ALL_FIELDS,
-        default=DEFAULT_FIELDS,
+        key=show_fields_key,
+        on_change=on_show_fields,
     )
 
     if expanded_view:
         for row in display.itertuples(index=False, name="Row"):  # type: ignore[assignment]
             if not show_fields:
                 break
-            with st.expander(f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all):
-                if "Resolved"  in show_fields: st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
-                if "Comment"      in show_fields: st.markdown(f"**Comment:** {row.Comment}")
-                if "Selected"  in show_fields and row.Selected:
+            with st.expander(
+                f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all
+            ):
+                if "Resolved" in show_fields:
+                    st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
+                if "Comment" in show_fields:
+                    st.markdown(f"**Comment:** {row.Comment}")
+                if "Selected" in show_fields and row.Selected:
                     st.markdown("**Selected:**")
                     render_paragraph_with_highlight(row.Selected, row.Selected)
                 if "Sentence" in show_fields and row.Sentence:
                     st.markdown("**Sentence:**")
-                    sentences = row.Sentence if isinstance(row.Sentence, list) else [row.Sentence]
+                    sentences = (
+                        row.Sentence
+                        if isinstance(row.Sentence, list)
+                        else [row.Sentence]
+                    )
                     for sent in sentences:
                         render_paragraph_with_highlight(sent, row.Selected)
                 if "Paragraph" in show_fields and row.Paragraph:
@@ -243,5 +281,9 @@ def render_comment_timeline(df: pd.DataFrame, title: str) -> None:
                     render_paragraph_with_highlight(row.Paragraph, row.Selected)
     else:
         if show_fields:
-            cols = ["Author", "Date", "Kind"] + [f for f in show_fields if f in display.columns]
-            st.dataframe(display[[c for c in cols if c in display.columns]], hide_index=True)
+            cols = ["Author", "Date", "Kind"] + [
+                f for f in show_fields if f in display.columns
+            ]
+            st.dataframe(
+                display[[c for c in cols if c in display.columns]], hide_index=True
+            )

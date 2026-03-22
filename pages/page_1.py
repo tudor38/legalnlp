@@ -24,6 +24,9 @@ DEFAULTS: dict = {
     "p1_closed_date": None,
     "p1_file_bytes": None,
     "p1_file_name": None,
+    "p1_expanded_view": False,
+    "p1_expand_all": False,
+    "p1_show_fields": ["Resolved", "Comment", "Sentence"],
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -50,6 +53,18 @@ def _store_is_closed():
 
 def _store_closed_date():
     st.session_state["p1_closed_date"] = st.session_state["_p1_closed_date"]
+
+
+def _store_expanded_view():
+    st.session_state["p1_expanded_view"] = st.session_state["_p1_expanded_view"]
+
+
+def _store_expand_all():
+    st.session_state["p1_expand_all"] = st.session_state["_p1_expand_all"]
+
+
+def _store_show_fields():
+    st.session_state["p1_show_fields"] = st.session_state["_p1_show_fields"]
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +168,21 @@ if file_bytes:
 
         render_comment_metrics(total + replies, resolved)
         render_author_bar(c_df, "Count by Author")
-        render_comment_timeline(c_df, "Timeline")
+
+        # --- Timeline widget state ---
+        st.session_state["_p1_expanded_view"] = st.session_state["p1_expanded_view"]
+        st.session_state["_p1_show_fields"] = st.session_state["p1_show_fields"]
+
+        render_comment_timeline(
+            c_df,
+            "Timeline",
+            expanded_view_key="_p1_expanded_view",
+            expand_all_key="_p1_expand_all",
+            show_fields_key="_p1_show_fields",
+            on_expanded_view=_store_expanded_view,
+            on_expand_all=_store_expand_all,
+            on_show_fields=_store_show_fields,
+        )
 
     with tab_r:
         if not r_df.empty:
@@ -175,5 +204,4 @@ if file_bytes:
             st.caption(f"From {earliest} → {end}")
 
         st.metric("Total Moves", len(moves))
-
         render_author_bar(m_df, "Move Count by Author")
