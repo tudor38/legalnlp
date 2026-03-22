@@ -9,17 +9,18 @@ import altair as alt
 import plotly.express as px
 from src.comments.render import render_paragraph_with_highlight
 
+# keeping author colors consistent across all chart libraries
 _AUTHOR_PALETTE = [
-    "#4c78a8",
-    "#f58518",
-    "#e45756",
-    "#72b7b2",
-    "#54a24b",
-    "#eeca3b",
-    "#b279a2",
-    "#ff9da6",
-    "#9d755d",
-    "#bab0ac",
+    "#7fa7c9",  # blue      (was #4e79a7)
+    "#f5b97a",  # orange    (was #f28e2b)
+    "#e88b8c",  # red       (was #e15759)
+    "#9dcdc9",  # teal      (was #76b7b2)
+    "#8dbc8a",  # green     (was #59a14f)
+    "#f2d97e",  # yellow    (was #edc948)
+    "#c9a3c4",  # purple    (was #b07aa1)
+    "#ffbfc8",  # pink      (was #ff9da7)
+    "#c0a08a",  # brown     (was #9c755f)
+    "#d0ccc8",  # gray      (was #bab0ac)
 ]
 
 _DATE_FMT = CFG["display"]["date_format"]
@@ -33,17 +34,14 @@ _TL_HEIGHT_BASE = CFG["chart"]["timeline_height_base"]
 
 
 def _author_color_scale_from(authors: list[str]) -> alt.Scale:
-    """Build a consistent color scale from an explicit author list."""
+    """Build an Altair color scale from an explicit sorted author list."""
     colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
 
 
 def _author_color_map(authors: list[str]) -> dict[str, str]:
-    sorted_authors = sorted(authors)
-    return {
-        a: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)]
-        for i, a in enumerate(sorted_authors)
-    }
+    """Build a Plotly color map from an explicit sorted author list."""
+    return {a: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i, a in enumerate(authors)}
 
 
 # ---------------------------------------------------------------------------
@@ -286,36 +284,40 @@ def render_comment_timeline(
     )
 
     if expanded_view:
-        for row in display.itertuples(index=False, name="Row"):  # type: ignore[assignment]
+        for _, row in display.iterrows():
             if not show_fields:
                 break
             with st.expander(
-                f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all
+                f"{row['Author']} · {row['Date']} · {row['Kind']}", expanded=expand_all
             ):
 
                 def render_field(field: str) -> None:
                     match field:
                         case "Resolved":
                             st.markdown(
-                                f"**Resolved:** {'Yes' if row.Resolved else 'No'}"
+                                f"**Resolved:** {'Yes' if row['Resolved'] else 'No'}"
                             )
                         case "Comment":
-                            st.markdown(f"**Comment:** {row.Comment}")
-                        case "Selected" if row.Selected:
+                            st.markdown(f"**Comment:** {row['Comment']}")
+                        case "Selected" if row["Selected"]:
                             st.markdown("**Selected:**")
-                            render_paragraph_with_highlight(row.Selected, row.Selected)
-                        case "Sentence" if row.Sentence:
+                            render_paragraph_with_highlight(
+                                row["Selected"], row["Selected"]
+                            )
+                        case "Sentence" if row["Sentence"]:
                             st.markdown("**Sentence:**")
                             sentences = (
-                                row.Sentence
-                                if isinstance(row.Sentence, list)
-                                else [row.Sentence]
+                                row["Sentence"]
+                                if isinstance(row["Sentence"], list)
+                                else [row["Sentence"]]
                             )
                             for sent in sentences:
-                                render_paragraph_with_highlight(sent, row.Selected)
-                        case "Paragraph" if row.Paragraph:
+                                render_paragraph_with_highlight(sent, row["Selected"])
+                        case "Paragraph" if row["Paragraph"]:
                             st.markdown("**Paragraph:**")
-                            render_paragraph_with_highlight(row.Paragraph, row.Selected)
+                            render_paragraph_with_highlight(
+                                row["Paragraph"], row["Selected"]
+                            )
 
                 for field in show_fields:
                     render_field(field)
