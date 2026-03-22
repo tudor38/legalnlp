@@ -139,72 +139,30 @@ def render_comment_timeline(
     expanded_view_key: str = "_expanded_view",
     expand_all_key: str = "_expand_all",
     show_fields_key: str = "_show_fields",
-    author_filter_key: str = "_timeline_authors",
-    date_filter_key: str = "_timeline_date",
     on_expanded_view=None,
     on_expand_all=None,
     on_show_fields=None,
-    on_author_filter=None,
-    on_date_filter=None,
 ) -> None:
-    if df.empty:
-        st.caption(f"No data for {title}.")
-        return
+    """
+    Render the comment timeline scatter plot and detail table.
 
-    import numpy as np
-
-    all_authors = sorted(df["author"].unique().tolist())
-    date_min = df["date"].min().date()
-    date_max = df["date"].max().date()
-
-    # --- Persistent filters ---
-    col_a, col_d = st.columns([1, 2])
-
-    with col_a:
-        selected_authors = (
-            st.multiselect(
-                "Authors",
-                options=all_authors,
-                key=author_filter_key,
-                on_change=on_author_filter,
-            )
-            or all_authors
-        )
-
-    with col_d:
-        saved_min = st.session_state.get("p1_timeline_date_min") or date_min
-        saved_max = st.session_state.get("p1_timeline_date_max") or date_max
-        # Clamp saved values to actual data range in case data changed
-        saved_min = max(saved_min, date_min)
-        saved_max = min(saved_max, date_max)
-        date_range = st.slider(
-            "Date range",
-            min_value=date_min,
-            max_value=date_max,
-            value=(saved_min, saved_max),
-            key=date_filter_key,
-            on_change=on_date_filter,
-        )
-
-    # --- Apply filters ---
-    rng = np.random.default_rng(42)
-    df = df.copy().reset_index(drop=True)
-    df = df[
-        df["author"].isin(selected_authors)
-        & (df["date"].dt.date >= date_range[0])
-        & (df["date"].dt.date <= date_range[1])
-    ].reset_index(drop=True)
-
+    Filters (author, date range) are applied upstream by the caller before
+    passing df in — they live in the sidebar, not here.
+    """
     if df.empty:
         st.caption("No data matches the current filters.")
         return
 
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    df = df.copy().reset_index(drop=True)
+
+    all_authors = sorted(df["author"].unique().tolist())
+    color_map = _author_color_map(all_authors)
+    author_idx = {a: i for i, a in enumerate(all_authors)}
     df["jitter"] = rng.uniform(-0.3, 0.3, size=len(df))
     df["_idx"] = df.index
-
-    visible_authors = sorted(df["author"].unique().tolist())
-    color_map = _author_color_map(all_authors)  # use all_authors for stable colors
-    author_idx = {a: i for i, a in enumerate(visible_authors)}
     df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
 
     fig = px.scatter(
@@ -222,13 +180,13 @@ def render_comment_timeline(
             "_idx": True,
         },
         title=title,
-        height=60 * len(visible_authors) + 120,
+        height=60 * len(all_authors) + 120,
     )
 
     fig.update_layout(
         yaxis=dict(
-            tickvals=list(range(len(visible_authors))),
-            ticktext=visible_authors,
+            tickvals=list(range(len(all_authors))),
+            ticktext=all_authors,
             title=None,
         ),
         xaxis_title="Date",
@@ -240,25 +198,30 @@ def render_comment_timeline(
 
     event = st.plotly_chart(fig, on_select="rerun", width="stretch")
 
-    if event and event["selection"] and event["selection"]["points"]:
+    has_selection = bool(event and event["selection"] and event["selection"]["points"])
+
+    if has_selection:
         indices = [int(p["customdata"][-1]) for p in event["selection"]["points"]]
         selected = df.iloc[indices]
     else:
         selected = df
 
-    total_sel = len(selected)
-    resolved_sel = int(selected["resolved"].sum())
-    authors_sel = int(selected["author"].nunique())
-    comments_sel = int((selected["kind"] == "comment").sum())
-    replies_sel = int((selected["kind"] == "reply").sum())
+    # --- Summary metrics — only show when there is an active point selection ---
+    if has_selection:
+        total_sel = len(selected)
+        resolved_sel = int(selected["resolved"].sum())
+        authors_sel = int(selected["author"].nunique())
+        comments_sel = int((selected["kind"] == "comment").sum())
+        replies_sel = int((selected["kind"] == "reply").sum())
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Selected", total_sel)
-    col2.metric("Authors", authors_sel)
-    col3.metric("Comments", comments_sel)
-    col4.metric("Replies", replies_sel)
-    col5.metric("Resolved", f"{resolved_sel}")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Selected", total_sel)
+        col2.metric("Authors", authors_sel)
+        col3.metric("Comments", comments_sel)
+        col4.metric("Replies", replies_sel)
+        col5.metric("Resolved", f"{resolved_sel}")
 
+    # --- Detail table ---
     display = selected[
         [
             "author",
@@ -277,6 +240,7 @@ def render_comment_timeline(
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
 
+    # --- Table controls ---
     col_view, col_expand = st.columns([1, 1])
     expanded_view = col_view.toggle(
         "Expanded view",
@@ -308,30 +272,32 @@ def render_comment_timeline(
             with st.expander(
                 f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all
             ):
-                if "Resolved" in show_fields:
-                    st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
-                if "Comment" in show_fields:
-                    st.markdown(f"**Comment:** {row.Comment}")
-                if "Selected" in show_fields and row.Selected:
-                    st.markdown("**Selected:**")
-                    render_paragraph_with_highlight(row.Selected, row.Selected)
-                if "Sentence" in show_fields and row.Sentence:
-                    st.markdown("**Sentence:**")
-                    sentences = (
-                        row.Sentence
-                        if isinstance(row.Sentence, list)
-                        else [row.Sentence]
-                    )
-                    for sent in sentences:
-                        render_paragraph_with_highlight(sent, row.Selected)
-                if "Paragraph" in show_fields and row.Paragraph:
-                    st.markdown("**Paragraph:**")
-                    render_paragraph_with_highlight(row.Paragraph, row.Selected)
+                def render_field(field: str) -> None:
+                    match field:
+                        case "Resolved":
+                            st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
+                        case "Comment":
+                            st.markdown(f"**Comment:** {row.Comment}")
+                        case "Selected" if row.Selected:
+                            st.markdown("**Selected:**")
+                            render_paragraph_with_highlight(row.Selected, row.Selected)
+                        case "Sentence" if row.Sentence:
+                            st.markdown("**Sentence:**")
+                            sentences = row.Sentence if isinstance(row.Sentence, list) else [row.Sentence]
+                            for sent in sentences:
+                                render_paragraph_with_highlight(sent, row.Selected)
+                        case "Paragraph" if row.Paragraph:
+                            st.markdown("**Paragraph:**")
+                            render_paragraph_with_highlight(row.Paragraph, row.Selected)
+
+                for field in show_fields:
+                    render_field(field)
     else:
         if show_fields:
             cols = ["Author", "Date", "Kind"] + [
                 f for f in show_fields if f in display.columns
             ]
             st.dataframe(
-                display[[c for c in cols if c in display.columns]], hide_index=True
+                display[[c for c in cols if c in display.columns]],
+                hide_index=True,
             )
