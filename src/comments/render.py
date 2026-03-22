@@ -75,21 +75,22 @@ def _reformat_inline_dates(text: str) -> str:
     return re.sub(r"\(\d{2}/\d{2}/\d{4}, \d{2}:\d{2}\)", replace, text)
 
 
+def render_paragraph_with_highlight(para: str, selected: str) -> None:
+    idx = para.find(selected)
+    if idx == -1:
+        st.markdown(f"> {para}")
+        return
+    before = para[:idx]
+    after = para[idx + len(selected) :]
+    annotated_text(before, (selected, "", _highlight_color()), after)
+
+
 def render_comments(
     comments: list[Comment],
     version: WordVersion,
     order: list[str],
     is_libreoffice: bool = False,
 ) -> None:
-    def render_paragraph_with_highlight(para: str, selected: str) -> None:
-        idx = para.find(selected)
-        if idx == -1:
-            st.markdown(f"> {para}")
-            return
-        before = para[:idx]
-        after = para[idx + len(selected) :]
-        annotated_text(before, (selected, "", _highlight_color()), after)
-
     def render_elements(c: Comment) -> None:
         for label in order:
             match label:
