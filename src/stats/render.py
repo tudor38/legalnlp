@@ -2,30 +2,35 @@ from src.comments.extract import Comment
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime
+import plotly.express as px
 
-from src.stats.compute import CommentSummary
-from src.stats.compute import RedlineSummary
+_AUTHOR_PALETTE = [
+    "#4c78a8",
+    "#f58518",
+    "#e45756",
+    "#72b7b2",
+    "#54a24b",
+    "#eeca3b",
+    "#b279a2",
+    "#ff9da6",
+    "#9d755d",
+    "#bab0ac",
+]
 
 
 def _author_color_scale(df: pd.DataFrame) -> alt.Scale:
-    """Build a consistent color scale across all charts for the same dataset."""
     authors = sorted(df["author"].unique().tolist())
-    # Altair's default categorical palette
-    palette = [
-        "#4c78a8",
-        "#f58518",
-        "#e45756",
-        "#72b7b2",
-        "#54a24b",
-        "#eeca3b",
-        "#b279a2",
-        "#ff9da6",
-        "#9d755d",
-        "#bab0ac",
-    ]
-    colors = [palette[i % len(palette)] for i in range(len(authors))]
+    colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
+
+
+def _author_color_map(authors: list[str]) -> dict[str, str]:
+    """Return {author: color} using the same palette as _author_color_scale."""
+    sorted_authors = sorted(authors)
+    return {
+        a: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)]
+        for i, a in enumerate(sorted_authors)
+    }
 
 
 def render_thread_depth(comments: list[Comment]) -> None:
@@ -76,50 +81,6 @@ def render_resolution_rate(comments: list[Comment]) -> float:
     return rate
 
 
-def render_age_boxplot(
-    df: pd.DataFrame,
-    title: str,
-) -> None:
-
-    if df.empty:
-        st.caption(f"No data for {title}.")
-        return
-
-    color_scale = _author_color_scale(df)
-
-    chart = (
-        alt.Chart(df)
-        .mark_boxplot(extent="min-max")
-        .encode(
-            x=alt.X("age_days:Q", title="Age (days)"),
-            y=alt.Y("author:N", title=None),
-            color=alt.Color("author:N", scale=color_scale, legend=None),
-            tooltip=[
-                alt.Tooltip("author:N", title="Author"),
-                alt.Tooltip("age_days:Q", title="Age (days)"),
-            ],
-        )
-        .properties(height=50 * df["author"].nunique() + 60)
-    )
-    st.markdown(
-        "**Age Distribution**",
-        help=(
-            "This plot maps the **negotiation lifecycle**, highlighting the start-to-finish duration and "
-            "the 'middle 50%' where the most intensive revision activity occurred.\n\n"
-            "**What each element shows:**\n"
-            "- **Box:** the middle 50% of item ages for that reviewer\n"
-            "- **Line through the box:** the median age\n"
-            "- **Whiskers:** the oldest and newest items\n"
-            "- **Dots beyond the whiskers:** outliers, items unusually old or new\n\n"
-            "**What to look for:**\n"
-            "- **Wide boxes** signal activity spread over a long period\n"
-            "- **Outliers** may represent forgotten or contested items\n"
-            "- **Non-overlapping boxes** across reviewers indicate sequential rather than parallel review"
-        ),
-    )
-    st.altair_chart(chart, width="stretch")
-
-
 def render_author_bar(df: pd.DataFrame, title: str) -> None:
     if df.empty:
         st.caption(f"No data for {title}.")
@@ -168,3 +129,78 @@ def render_comment_metrics(
     for col, (label, value, delta) in zip(cols, items):
         tile = col.container(border=True, height=120)
         tile.metric(label, value, delta=delta)
+
+
+def render_comment_timeline(df: pd.DataFrame, title: str) -> None:
+    if df.empty:
+        st.caption(f"No data for {title}.")
+        return
+
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    df = df.copy()
+    df["jitter"] = rng.uniform(-0.3, 0.3, size=len(df))
+
+    all_authors = sorted(df["author"].unique().tolist())
+    color_map = _author_color_map(all_authors)
+    author_idx = {a: i for i, a in enumerate(all_authors)}
+    df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
+
+    fig = px.scatter(
+        df,
+        x="date",
+        y="y_jittered",
+        color="author",
+        color_discrete_map=color_map,
+        hover_data={
+            "date": "|%B %d, %Y",
+            "author": True,
+            "kind": True,
+            "resolved": True,
+            "y_jittered": False,
+        },
+        title=title,
+        height=60 * len(all_authors) + 120,
+    )
+
+    fig.update_layout(
+        yaxis=dict(
+            tickvals=list(range(len(all_authors))),
+            ticktext=all_authors,
+            title=None,
+        ),
+        xaxis_title="Date",
+        dragmode="select",
+        legend_title="Author",
+        modebar_add=["lasso2d", "select2d"],
+    )
+    fig.update_traces(marker=dict(size=10, opacity=0.75))
+
+    event = st.plotly_chart(fig, on_select="rerun", use_container_width=True)
+
+    if event and event["selection"] and event["selection"]["points"]:
+        indices = [p["point_index"] for p in event["selection"]["points"]]
+        selected = df.iloc[indices]
+    else:
+        selected = df
+
+    total_sel = len(selected)
+    resolved_sel = int(selected["resolved"].sum())
+    authors_sel = selected["author"].nunique()
+    comments_sel = int((selected["kind"] == "comment").sum())
+    replies_sel = int((selected["kind"] == "reply").sum())
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Selected", total_sel)
+    col2.metric("Authors", authors_sel)
+    col3.metric("Comments", comments_sel)
+    col4.metric("Replies", replies_sel)
+    col5.metric("Resolved", f"{resolved_sel} of {total_sel}")
+
+    display = selected[
+        ["author", "date", "kind", "resolved", "text", "sentences", "paragraph"]
+    ].copy()
+    if pd.api.types.is_datetime64_any_dtype(display["date"]):
+        display["date"] = display["date"].dt.strftime("%B %-d, %Y")
+    st.dataframe(display.sort_values("date").reset_index(drop=True), hide_index=True)

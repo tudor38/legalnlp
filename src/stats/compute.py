@@ -40,6 +40,11 @@ def comment_ages_df(
                     "date": dt,
                     "resolved": c.resolved,
                     "kind": kind,
+                    "text": c.text,
+                    "sentences": " / ".join(s.text for s in c.context.sentences)
+                    if c.context
+                    else None,
+                    "paragraph": c.context.paragraph_text if c.context else None,
                 }
             )
         except ValueError:

@@ -10,9 +10,9 @@ from src.stats.compute import (
     move_ages_df,
 )
 from src.stats.render import (
-    render_age_boxplot,
     render_author_bar,
     render_comment_metrics,
+    render_comment_timeline,
 )
 
 
@@ -143,7 +143,7 @@ if file_bytes:
         if not c_df.empty:
             earliest = c_df["date"].min().strftime("%B %-d, %Y")
             end = reference_date.strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {end}")
+            st.caption(f"From {earliest} → {end}")
 
         total = len(comments)
         replies = sum(len(c.replies) for c in comments)
@@ -153,13 +153,13 @@ if file_bytes:
 
         render_comment_metrics(total + replies, resolved)
         render_author_bar(c_df, "Count by Author")
-        render_age_boxplot(c_df, "Age Distribution")
+        render_comment_timeline(c_df, "Timeline")
 
     with tab_r:
         if not r_df.empty:
             earliest = r_df["date"].min().strftime("%B %-d, %Y")
             end = reference_date.strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {end}")
+            st.caption(f"From {earliest} → {end}")
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Total", len(redlines))
@@ -167,15 +167,13 @@ if file_bytes:
         col3.metric("Deletions", sum(1 for r in redlines if r.kind == "deletion"))
 
         render_author_bar(r_df, "Count by Author")
-        render_age_boxplot(r_df, "Age Distribution")
 
     with tab_m:
         if not m_df.empty:
             earliest = m_df["date"].min().strftime("%B %-d, %Y")
             end = reference_date.strftime("%B %-d, %Y")
-            st.caption(f"{earliest} → {end}")
+            st.caption(f"From {earliest} → {end}")
 
         st.metric("Total Moves", len(moves))
 
         render_author_bar(m_df, "Move Count by Author")
-        render_age_boxplot(m_df, "Move Age Distribution")
