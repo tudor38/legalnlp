@@ -29,8 +29,10 @@ DEFAULTS: dict = {
     "p1_expand_all": False,
     "p1_show_fields": ["Resolved", "Sentence", "Comment"],
     "p1_timeline_authors": [],
-    "p1_timeline_date_min": None,
-    "p1_timeline_date_max": None,
+    "p1_date_min": None,
+    "p1_date_max": None,
+    "p1_main_tab": "Comments",
+    "p1_comment_tab": "Counts",
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -75,17 +77,24 @@ def _store_timeline_authors():
     st.session_state["p1_timeline_authors"] = st.session_state["_p1_timeline_authors"]
 
 
-def _store_timeline_date():
-    val = st.session_state["_p1_timeline_date"]
-    st.session_state["p1_timeline_date_min"] = val[0]
-    st.session_state["p1_timeline_date_max"] = val[1]
+def _store_main_tab():
+    st.session_state["p1_main_tab"] = st.session_state["_p1_main_tab"]
+
+
+def _store_comment_tab():
+    st.session_state["p1_comment_tab"] = st.session_state["_p1_comment_tab"]
+
+
+def _store_date_range():
+    val = st.session_state["_p1_date_range"]
+    st.session_state["p1_date_min"] = val[0]
+    st.session_state["p1_date_max"] = val[1]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _latest_date(comments, redlines) -> datetime | None:
-    """Return the latest date across all comments and redlines."""
     dates = []
     for c in comments:
         try:
@@ -101,7 +110,6 @@ def _latest_date(comments, redlines) -> datetime | None:
 
 
 def _load_document(file_bytes: bytes) -> tuple:
-    """Extract all data from file bytes, creating a fresh BytesIO for each call."""
     comments, version = extract_comments(io.BytesIO(file_bytes))
     redlines, _ = extract_redlines(io.BytesIO(file_bytes))
     moves, _ = extract_moves(io.BytesIO(file_bytes))
@@ -109,14 +117,27 @@ def _load_document(file_bytes: bytes) -> tuple:
     return comments, version, redlines, moves, doc_paragraphs
 
 
-def _sidebar_controls(comments, redlines, c_df) -> tuple[datetime, pd.DataFrame]:
+def _filter_by_date(df: pd.DataFrame, date_min, date_max) -> pd.DataFrame:
+    """Filter a DataFrame with a 'date' column by date range."""
+    if df.empty:
+        return df
+    return df[
+        (df["date"].dt.date >= date_min) & (df["date"].dt.date <= date_max)
+    ].reset_index(drop=True)
+
+
+def _sidebar_controls(
+    comments, redlines, c_df, r_df, m_df
+) -> tuple[datetime, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Render all sidebar controls.
 
     Returns
     -------
-    reference_date : datetime
-    filtered_c_df  : c_df filtered by author and date range selections
+    reference_date         : datetime
+    filtered_c_df          : comments filtered by author + date range
+    filtered_r_df          : redlines filtered by date range
+    filtered_m_df          : moves filtered by date range
     """
     # --- Matter closed ---
     st.sidebar.markdown("### Document")
@@ -145,55 +166,66 @@ def _sidebar_controls(comments, redlines, c_df) -> tuple[datetime, pd.DataFrame]
     else:
         reference_date = datetime.now()
 
-    if c_df.empty:
-        return reference_date, c_df
+    all_dfs = [df for df in [c_df, r_df, m_df] if not df.empty]
+    if not all_dfs:
+        return reference_date, c_df, r_df, m_df
 
-    # --- Timeline filters ---
-    st.sidebar.markdown("### Timeline filters")
+    # --- Global date range ---
+    st.sidebar.markdown("### Filters")
 
-    all_authors = sorted(c_df["author"].unique().tolist())
-    date_min = c_df["date"].min().date()
-    date_max = c_df["date"].max().date()
+    global_date_min = min(df["date"].min().date() for df in all_dfs)
+    global_date_max = max(df["date"].max().date() for df in all_dfs)
 
-    # Seed author default on first load
-    if not st.session_state["p1_timeline_authors"]:
-        st.session_state["_p1_timeline_authors"] = all_authors
-    else:
-        st.session_state["_p1_timeline_authors"] = st.session_state[
-            "p1_timeline_authors"
-        ]
+    if not is_closed:
+        global_date_max = datetime.now().date()
 
-    selected_authors = (
-        st.sidebar.multiselect(
-            "Authors",
-            options=all_authors,
-            key="_p1_timeline_authors",
-            on_change=_store_timeline_authors,
-        )
-        or all_authors
-    )
-
-    saved_min = st.session_state["p1_timeline_date_min"] or date_min
-    saved_max = st.session_state["p1_timeline_date_max"] or date_max
-    saved_min = max(saved_min, date_min)
-    saved_max = min(saved_max, date_max)
+    saved_min = st.session_state["p1_date_min"] or global_date_min
+    saved_max = st.session_state["p1_date_max"] or global_date_max
+    saved_min = max(saved_min, global_date_min)
+    saved_max = min(saved_max, global_date_max)
 
     date_range = st.sidebar.slider(
         "Date range",
-        min_value=date_min,
-        max_value=date_max,
+        min_value=global_date_min,
+        max_value=global_date_max,
         value=(saved_min, saved_max),
-        key="_p1_timeline_date",
-        on_change=_store_timeline_date,
+        key="_p1_date_range",
+        on_change=_store_date_range,
     )
 
-    filtered_c_df = c_df[
-        c_df["author"].isin(selected_authors)
-        & (c_df["date"].dt.date >= date_range[0])
-        & (c_df["date"].dt.date <= date_range[1])
-    ].reset_index(drop=True)
+    # --- Author filter (comments only) ---
+    if not c_df.empty:
+        all_authors = sorted(c_df["author"].unique().tolist())
+        if not st.session_state["p1_timeline_authors"]:
+            st.session_state["_p1_timeline_authors"] = all_authors
+        else:
+            st.session_state["_p1_timeline_authors"] = st.session_state[
+                "p1_timeline_authors"
+            ]
 
-    return reference_date, filtered_c_df
+        selected_authors = (
+            st.sidebar.multiselect(
+                "Comment authors",
+                options=all_authors,
+                key="_p1_timeline_authors",
+                on_change=_store_timeline_authors,
+            )
+            or all_authors
+        )
+    else:
+        selected_authors = []
+
+    # --- Apply filters ---
+    filtered_c_df = _filter_by_date(c_df, date_range[0], date_range[1])
+    if not filtered_c_df.empty and selected_authors:
+        filtered_c_df = filtered_c_df[
+            filtered_c_df["author"].isin(selected_authors)
+        ].reset_index(drop=True)
+
+    filtered_r_df = _filter_by_date(r_df, date_range[0], date_range[1])
+    filtered_m_df = _filter_by_date(m_df, date_range[0], date_range[1])
+
+    return reference_date, filtered_c_df, filtered_r_df, filtered_m_df
 
 
 # ---------------------------------------------------------------------------
@@ -211,42 +243,63 @@ file_bytes = st.session_state["p1_file_bytes"]
 if file_bytes:
     comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
 
-    c_df = comment_ages_df(
-        comments, datetime.now()
-    )  # use now() for initial load; reference_date applied after sidebar
+    # Initial load with datetime.now() to get date ranges for sidebar
+    c_df = comment_ages_df(comments, datetime.now())
     r_df = redline_ages_df(redlines, datetime.now())
     m_df = move_ages_df(moves, datetime.now())
 
-    reference_date, filtered_c_df = _sidebar_controls(comments, redlines, c_df)
+    reference_date, filtered_c_df, filtered_r_df, filtered_m_df = _sidebar_controls(
+        comments, redlines, c_df, r_df, m_df
+    )
 
-    # Recompute with correct reference_date after sidebar resolves it
+    # Recompute with correct reference_date then re-apply filters
     c_df = comment_ages_df(comments, reference_date)
     r_df = redline_ages_df(redlines, reference_date)
     m_df = move_ages_df(moves, reference_date)
 
-    # Re-apply filters with correctly dated df
-    if not c_df.empty:
-        all_authors = sorted(c_df["author"].unique().tolist())
-        date_min = c_df["date"].min().date()
-        date_max = c_df["date"].max().date()
-        sel_authors = st.session_state.get("p1_timeline_authors") or all_authors
-        saved_min = st.session_state.get("p1_timeline_date_min") or date_min
-        saved_max = st.session_state.get("p1_timeline_date_max") or date_max
-        saved_min = max(saved_min, date_min)
-        saved_max = min(saved_max, date_max)
-        filtered_c_df = c_df[
-            c_df["author"].isin(sel_authors)
-            & (c_df["date"].dt.date >= saved_min)
-            & (c_df["date"].dt.date <= saved_max)
+    date_min = st.session_state.get("p1_date_min")
+    date_max = st.session_state.get("p1_date_max")
+
+    if date_min and date_max and not c_df.empty:
+        global_date_min = min(
+            df["date"].min().date() for df in [c_df, r_df, m_df] if not df.empty
+        )
+        global_date_max = max(
+            df["date"].max().date() for df in [c_df, r_df, m_df] if not df.empty
+        )
+        date_min = max(date_min, global_date_min)
+        date_max = min(date_max, global_date_max)
+
+        sel_authors = st.session_state.get("p1_timeline_authors") or sorted(
+            c_df["author"].unique().tolist()
+        )
+        filtered_c_df = _filter_by_date(c_df, date_min, date_max)
+        filtered_c_df = filtered_c_df[
+            filtered_c_df["author"].isin(sel_authors)
         ].reset_index(drop=True)
-    else:
-        filtered_c_df = c_df
+        filtered_r_df = _filter_by_date(r_df, date_min, date_max)
+        filtered_m_df = _filter_by_date(m_df, date_min, date_max)
 
-    tab_c, tab_r, tab_m = st.tabs(["Comments", "Redlines", "Moves"])
+    # --- Main tab selection (persistent) ---
+    st.session_state["_p1_main_tab"] = st.session_state["p1_main_tab"]
+    main_tab = st.pills(
+        "Section",
+        ["Comments", "Redlines", "Moves"],
+        key="_p1_main_tab",
+        on_change=_store_main_tab,
+        selection_mode="single",
+    )
 
-    with tab_c:
+    # ---------------------------------------------------------------------------
+    # Comments
+    # ---------------------------------------------------------------------------
+    if main_tab == "Comments":
         if not c_df.empty:
-            earliest = c_df["date"].min().strftime("%B %-d, %Y")
+            earliest = (
+                filtered_c_df["date"].min().strftime("%B %-d, %Y")
+                if not filtered_c_df.empty
+                else "—"
+            )
             end = reference_date.strftime("%B %-d, %Y")
             st.caption(f"From {earliest} → {end}")
 
@@ -258,15 +311,23 @@ if file_bytes:
 
         render_comment_metrics(total + replies, resolved)
 
-        tab_counts, tab_timeline = st.tabs(["Counts", "Timeline"])
-        with tab_counts:
-            render_author_bar(c_df, "Count by Author")
+        st.session_state["_p1_comment_tab"] = st.session_state["p1_comment_tab"]
+        comment_tab = st.pills(
+            "View",
+            ["Counts", "Timeline"],
+            key="_p1_comment_tab",
+            on_change=_store_comment_tab,
+            selection_mode="single",
+        )
 
-        st.session_state["_p1_expanded_view"] = st.session_state["p1_expanded_view"]
-        st.session_state["_p1_expand_all"] = st.session_state["p1_expand_all"]
-        st.session_state["_p1_show_fields"] = st.session_state["p1_show_fields"]
+        if comment_tab == "Counts":
+            render_author_bar(filtered_c_df, "Count by Author")
 
-        with tab_timeline:
+        elif comment_tab == "Timeline":
+            st.session_state["_p1_expanded_view"] = st.session_state["p1_expanded_view"]
+            st.session_state["_p1_expand_all"] = st.session_state["p1_expand_all"]
+            st.session_state["_p1_show_fields"] = st.session_state["p1_show_fields"]
+
             render_comment_timeline(
                 filtered_c_df,
                 "Timeline",
@@ -278,24 +339,40 @@ if file_bytes:
                 on_show_fields=_store_show_fields,
             )
 
-        with tab_r:
-            if not r_df.empty:
-                earliest = r_df["date"].min().strftime("%B %-d, %Y")
-                end = reference_date.strftime("%B %-d, %Y")
-                st.caption(f"From {earliest} → {end}")
+    # ---------------------------------------------------------------------------
+    # Redlines
+    # ---------------------------------------------------------------------------
+    elif main_tab == "Redlines":
+        if not filtered_r_df.empty:
+            earliest = filtered_r_df["date"].min().strftime("%B %-d, %Y")
+            end = reference_date.strftime("%B %-d, %Y")
+            st.caption(f"From {earliest} → {end}")
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total", len(redlines))
-            col2.metric("Insertions", sum(1 for r in redlines if r.kind == "insertion"))
-            col3.metric("Deletions", sum(1 for r in redlines if r.kind == "deletion"))
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total", len(filtered_r_df))
+        col2.metric(
+            "Insertions",
+            int((filtered_r_df["kind"] == "insertion").sum())
+            if not filtered_r_df.empty
+            else 0,
+        )
+        col3.metric(
+            "Deletions",
+            int((filtered_r_df["kind"] == "deletion").sum())
+            if not filtered_r_df.empty
+            else 0,
+        )
 
-            render_author_bar(r_df, "Count by Author")
+        render_author_bar(filtered_r_df, "Count by Author")
 
-        with tab_m:
-            if not m_df.empty:
-                earliest = m_df["date"].min().strftime("%B %-d, %Y")
-                end = reference_date.strftime("%B %-d, %Y")
-                st.caption(f"From {earliest} → {end}")
+    # ---------------------------------------------------------------------------
+    # Moves
+    # ---------------------------------------------------------------------------
+    elif main_tab == "Moves":
+        if not filtered_m_df.empty:
+            earliest = filtered_m_df["date"].min().strftime("%B %-d, %Y")
+            end = reference_date.strftime("%B %-d, %Y")
+            st.caption(f"From {earliest} → {end}")
 
-            st.metric("Total Moves", len(moves))
-            render_author_bar(m_df, "Move Count by Author")
+        st.metric("Total Moves", len(filtered_m_df))
+        render_author_bar(filtered_m_df, "Move Count by Author")

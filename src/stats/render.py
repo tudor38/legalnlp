@@ -272,10 +272,13 @@ def render_comment_timeline(
             with st.expander(
                 f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all
             ):
+
                 def render_field(field: str) -> None:
                     match field:
                         case "Resolved":
-                            st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
+                            st.markdown(
+                                f"**Resolved:** {'Yes' if row.Resolved else 'No'}"
+                            )
                         case "Comment":
                             st.markdown(f"**Comment:** {row.Comment}")
                         case "Selected" if row.Selected:
@@ -283,7 +286,11 @@ def render_comment_timeline(
                             render_paragraph_with_highlight(row.Selected, row.Selected)
                         case "Sentence" if row.Sentence:
                             st.markdown("**Sentence:**")
-                            sentences = row.Sentence if isinstance(row.Sentence, list) else [row.Sentence]
+                            sentences = (
+                                row.Sentence
+                                if isinstance(row.Sentence, list)
+                                else [row.Sentence]
+                            )
                             for sent in sentences:
                                 render_paragraph_with_highlight(sent, row.Selected)
                         case "Paragraph" if row.Paragraph:
