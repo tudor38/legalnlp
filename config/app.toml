@@ -1,0 +1,22 @@
+[display]
+date_format             = "%B %-d, %Y"
+para_truncate_len       = 80
+allowed_filetypes       = ["docx", "doc"]
+closed_date_offset_days = 1
+
+[chart]
+marker_size                 = 10
+marker_opacity              = 0.75
+bar_height_per_row          = 50
+bar_height_base             = 60
+timeline_height_per_author  = 60
+timeline_height_base        = 120
+card_height                 = 120
+
+[time_bin]
+day_max_days  = 30
+week_max_days = 180
+
+[pages.page_1.tabs]
+main          = ["Comments", "Redlines", "Moves"]
+comment_views = ["Counts", "Timeline"]

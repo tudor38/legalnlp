@@ -24,7 +24,7 @@ _AUTHOR_PALETTE = [
 
 def _author_color_scale(df: pd.DataFrame) -> alt.Scale:
     authors = sorted(df["author"].unique().tolist())
-    colors  = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
+    colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
 
 
@@ -46,7 +46,7 @@ def render_date_caption(
     if df.empty:
         return
     earliest = df["date"].min().strftime("%B %-d, %Y")
-    end      = (
+    end = (
         df["date"].max().strftime("%B %-d, %Y")
         if is_closed
         else reference_date.strftime("%B %-d, %Y")
@@ -60,8 +60,8 @@ def render_date_caption(
 def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 3) -> None:
     """Render Total / Open / Resolved cards from a CommentMetrics object."""
     items = [
-        ("Total",    metrics.total,    None),
-        ("Open",     metrics.open,     None),
+        ("Total", metrics.total, None),
+        ("Open", metrics.open, None),
         ("Resolved", metrics.resolved, None),
     ]
     cols = st.columns(n_cols)
@@ -91,9 +91,9 @@ def render_thread_depth(comments: list[Comment]) -> None:
                 scale=alt.Scale(domain=[True, False], range=["#22c55e", "#3b82f6"]),
             ),
             tooltip=[
-                alt.Tooltip("author:N",   title="Author"),
-                alt.Tooltip("text:N",     title="Comment"),
-                alt.Tooltip("replies:Q",  title="Replies"),
+                alt.Tooltip("author:N", title="Author"),
+                alt.Tooltip("text:N", title="Comment"),
+                alt.Tooltip("replies:Q", title="Replies"),
                 alt.Tooltip("resolved:N", title="Resolved"),
             ],
         )
@@ -128,7 +128,7 @@ def render_author_bar(df: pd.DataFrame, title: str) -> None:
             color=alt.Color("author:N", scale=color_scale, legend=None),
             tooltip=[
                 alt.Tooltip("author:N", title="Author"),
-                alt.Tooltip("count:Q",  title="Count"),
+                alt.Tooltip("count:Q", title="Count"),
             ],
         )
         .properties(title=title, height=50 * len(counts) + 60)
@@ -140,14 +140,14 @@ def render_author_bar(df: pd.DataFrame, title: str) -> None:
 # Comment timeline
 # ---------------------------------------------------------------------------
 def render_comment_timeline(
-    df:                pd.DataFrame,
-    title:             str,
-    expanded_view_key: str  = "_expanded_view",
-    expand_all_key:    str  = "_expand_all",
-    show_fields_key:   str  = "_show_fields",
-    on_expanded_view        = None,
-    on_expand_all           = None,
-    on_show_fields          = None,
+    df: pd.DataFrame,
+    title: str,
+    expanded_view_key: str = "_expanded_view",
+    expand_all_key: str = "_expand_all",
+    show_fields_key: str = "_show_fields",
+    on_expanded_view=None,
+    on_expand_all=None,
+    on_show_fields=None,
 ) -> None:
     """
     Render the comment timeline scatter plot and detail table.
@@ -160,13 +160,13 @@ def render_comment_timeline(
     import numpy as np
 
     rng = np.random.default_rng(42)
-    df  = df.copy().reset_index(drop=True)
+    df = df.copy().reset_index(drop=True)
 
-    all_authors  = sorted(df["author"].unique().tolist())
-    color_map    = _author_color_map(all_authors)
-    author_idx   = {a: i for i, a in enumerate(all_authors)}
-    df["jitter"]     = rng.uniform(-0.3, 0.3, size=len(df))
-    df["_idx"]       = df.index
+    all_authors = sorted(df["author"].unique().tolist())
+    color_map = _author_color_map(all_authors)
+    author_idx = {a: i for i, a in enumerate(all_authors)}
+    df["jitter"] = rng.uniform(-0.3, 0.3, size=len(df))
+    df["_idx"] = df.index
     df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
 
     fig = px.scatter(
@@ -176,12 +176,12 @@ def render_comment_timeline(
         color="author",
         color_discrete_map=color_map,
         hover_data={
-            "date":       "|%B %d, %Y",
-            "author":     True,
-            "kind":       True,
-            "resolved":   True,
+            "date": "|%B %d, %Y",
+            "author": True,
+            "kind": True,
+            "resolved": True,
             "y_jittered": False,
-            "_idx":       True,
+            "_idx": True,
         },
         title=title,
         height=60 * len(all_authors) + 120,
@@ -200,33 +200,44 @@ def render_comment_timeline(
     )
     fig.update_traces(marker=dict(size=10, opacity=0.75))
 
-    event         = st.plotly_chart(fig, on_select="rerun", width="stretch")
+    event = st.plotly_chart(fig, on_select="rerun", width="stretch")
     has_selection = bool(event and event["selection"] and event["selection"]["points"])
 
     if has_selection:
-        indices  = [int(p["customdata"][-1]) for p in event["selection"]["points"]]
+        indices = [int(p["customdata"][-1]) for p in event["selection"]["points"]]
         selected = df.iloc[indices]
     else:
         selected = df
 
     if has_selection:
-        total_sel    = len(selected)
+        total_sel = len(selected)
         resolved_sel = int(selected["resolved"].sum())
-        authors_sel  = int(selected["author"].nunique())
+        authors_sel = int(selected["author"].nunique())
         comments_sel = int((selected["kind"] == "comment").sum())
-        replies_sel  = int((selected["kind"] == "reply").sum())
+        replies_sel = int((selected["kind"] == "reply").sum())
 
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Selected",  total_sel)
-        col2.metric("Authors",   authors_sel)
-        col3.metric("Comments",  comments_sel)
-        col4.metric("Replies",   replies_sel)
-        col5.metric("Resolved",  f"{resolved_sel}")
+        col1.metric("Selected", total_sel)
+        col2.metric("Authors", authors_sel)
+        col3.metric("Comments", comments_sel)
+        col4.metric("Replies", replies_sel)
+        col5.metric("Resolved", f"{resolved_sel}")
 
     display = selected[
-        ["author", "date", "kind", "resolved", "comment", "selected", "sentence", "paragraph"]
+        [
+            "author",
+            "date",
+            "kind",
+            "resolved",
+            "comment",
+            "selected",
+            "sentence",
+            "paragraph",
+        ]
     ].copy()
-    display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime("%B %-d, %Y")
+    display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(
+        "%B %-d, %Y"
+    )
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
 
@@ -236,13 +247,17 @@ def render_comment_timeline(
         key=expanded_view_key,
         on_change=on_expanded_view,
     )
-    expand_all = col_expand.toggle(
-        "Expand all",
-        key=expand_all_key,
-        on_change=on_expand_all,
-    ) if expanded_view else False
+    expand_all = (
+        col_expand.toggle(
+            "Expand all",
+            key=expand_all_key,
+            on_change=on_expand_all,
+        )
+        if expanded_view
+        else False
+    )
 
-    ALL_FIELDS  = ["Resolved", "Comment", "Selected", "Sentence", "Paragraph"]
+    ALL_FIELDS = ["Resolved", "Comment", "Selected", "Sentence", "Paragraph"]
     show_fields = st.multiselect(
         "Fields to show",
         options=ALL_FIELDS,
@@ -257,10 +272,13 @@ def render_comment_timeline(
             with st.expander(
                 f"{row.Author} · {row.Date} · {row.Kind}", expanded=expand_all
             ):
+
                 def render_field(field: str) -> None:
                     match field:
                         case "Resolved":
-                            st.markdown(f"**Resolved:** {'Yes' if row.Resolved else 'No'}")
+                            st.markdown(
+                                f"**Resolved:** {'Yes' if row.Resolved else 'No'}"
+                            )
                         case "Comment":
                             st.markdown(f"**Comment:** {row.Comment}")
                         case "Selected" if row.Selected:
@@ -268,7 +286,11 @@ def render_comment_timeline(
                             render_paragraph_with_highlight(row.Selected, row.Selected)
                         case "Sentence" if row.Sentence:
                             st.markdown("**Sentence:**")
-                            sentences = row.Sentence if isinstance(row.Sentence, list) else [row.Sentence]
+                            sentences = (
+                                row.Sentence
+                                if isinstance(row.Sentence, list)
+                                else [row.Sentence]
+                            )
                             for sent in sentences:
                                 render_paragraph_with_highlight(sent, row.Selected)
                         case "Paragraph" if row.Paragraph:
@@ -279,7 +301,9 @@ def render_comment_timeline(
                     render_field(field)
     else:
         if show_fields:
-            cols = ["Author", "Date", "Kind"] + [f for f in show_fields if f in display.columns]
+            cols = ["Author", "Date", "Kind"] + [
+                f for f in show_fields if f in display.columns
+            ]
             st.dataframe(
                 display[[c for c in cols if c in display.columns]],
                 hide_index=True,
