@@ -217,7 +217,32 @@ def _sidebar_controls(
 # ---------------------------------------------------------------------------
 # Tab renderers
 # ---------------------------------------------------------------------------
-def _render_comments(filtered_c_df, reference_date, is_closed, comments) -> None:
+def _render_timeline(
+    filtered_c_df: pd.DataFrame,
+    all_authors: list[str],
+) -> None:
+    for key in ("p1_expanded_view", "p1_expand_all", "p1_show_fields"):
+        _seed(key)
+    render_comment_timeline(
+        filtered_c_df,
+        "Who commented and when?",
+        all_authors=all_authors,
+        expanded_view_key="_p1_expanded_view",
+        expand_all_key="_p1_expand_all",
+        show_fields_key="_p1_show_fields",
+        on_expanded_view=_store_expanded_view,
+        on_expand_all=_store_expand_all,
+        on_show_fields=_store_show_fields,
+    )
+
+
+def _render_comments(
+    filtered_c_df: pd.DataFrame,
+    reference_date: datetime,
+    is_closed: bool,
+    comments: list,
+    all_authors: list[str],
+) -> None:
     render_date_caption(filtered_c_df, reference_date, is_closed)
     render_comment_metrics(comment_metrics(comments))
 
@@ -228,57 +253,54 @@ def _render_comments(filtered_c_df, reference_date, is_closed, comments) -> None
         key="_p1_comment_tab",
         on_change=_store_comment_tab,
         selection_mode="single",
+        label_visibility="collapsed",
     )
 
     comment_view_renderers = {
         COMMENT_VIEWS.counts: lambda: render_author_bar(
-            filtered_c_df, "Count by Author"
+            filtered_c_df, "Who commented and how much?", all_authors=all_authors
         ),
-        COMMENT_VIEWS.timeline: lambda: _render_timeline(filtered_c_df),
+        COMMENT_VIEWS.timeline: lambda: _render_timeline(filtered_c_df, all_authors),
     }
-
     if comment_tab in comment_view_renderers:
         comment_view_renderers[comment_tab]()
 
 
-def _render_timeline(filtered_c_df: pd.DataFrame) -> None:
-    for key in ("p1_expanded_view", "p1_expand_all", "p1_show_fields"):
-        _seed(key)
-    render_comment_timeline(
-        filtered_c_df,
-        "Timeline",
-        expanded_view_key="_p1_expanded_view",
-        expand_all_key="_p1_expand_all",
-        show_fields_key="_p1_show_fields",
-        on_expanded_view=_store_expanded_view,
-        on_expand_all=_store_expand_all,
-        on_show_fields=_store_show_fields,
-    )
-
-
-def _render_redlines(filtered_r_df, reference_date, is_closed) -> None:
+def _render_redlines(
+    filtered_r_df: pd.DataFrame,
+    reference_date: datetime,
+    is_closed: bool,
+    all_authors: list[str],
+) -> None:
     render_date_caption(filtered_r_df, reference_date, is_closed)
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total", len(filtered_r_df))
+    col1.metric("Total", len(filtered_r_df), border=True)
     col2.metric(
         "Insertions",
         int((filtered_r_df["kind"] == "insertion").sum())
         if not filtered_r_df.empty
         else 0,
+        border=True,
     )
     col3.metric(
         "Deletions",
         int((filtered_r_df["kind"] == "deletion").sum())
         if not filtered_r_df.empty
         else 0,
+        border=True,
     )
-    render_author_bar(filtered_r_df, "Count by Author")
+    render_author_bar(filtered_r_df, "Count by Author", all_authors=all_authors)
 
 
-def _render_moves(filtered_m_df, reference_date, is_closed) -> None:
+def _render_moves(
+    filtered_m_df: pd.DataFrame,
+    reference_date: datetime,
+    is_closed: bool,
+    all_authors: list[str],
+) -> None:
     render_date_caption(filtered_m_df, reference_date, is_closed)
     st.metric("Total Moves", len(filtered_m_df))
-    render_author_bar(filtered_m_df, "Move Count by Author")
+    render_author_bar(filtered_m_df, "Move Count by Author", all_authors=all_authors)
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +318,7 @@ file_bytes = st.session_state["p1_file_bytes"]
 if file_bytes:
     comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
 
+    # Initial compute with now() to populate sidebar date slider
     c_df = comment_ages_df(comments, datetime.now())
     r_df = redline_ages_df(redlines, datetime.now())
     m_df = move_ages_df(moves, datetime.now())
@@ -304,10 +327,15 @@ if file_bytes:
         comments, redlines, [c_df, r_df, m_df]
     )
 
+    # Recompute with correct reference_date
     c_df = comment_ages_df(comments, reference_date)
     r_df = redline_ages_df(redlines, reference_date)
     m_df = move_ages_df(moves, reference_date)
 
+    # Global author list — from unfiltered c_df for stable colors
+    all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
+
+    # Apply filters once
     filtered_c_df = filter_by_date(c_df, date_range[0], date_range[1])
     if not filtered_c_df.empty and selected_authors:
         filtered_c_df = filtered_c_df[
@@ -316,6 +344,7 @@ if file_bytes:
     filtered_r_df = filter_by_date(r_df, date_range[0], date_range[1])
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
 
+    # --- Main tab ---
     _seed("p1_main_tab")
     main_tab = st.pills(
         "Section",
@@ -323,19 +352,21 @@ if file_bytes:
         key="_p1_main_tab",
         on_change=_store_main_tab,
         selection_mode="single",
+        label_visibility="collapsed",
     )
 
     tab_renderers = {
         MAIN_TABS.comments: lambda: _render_comments(
-            filtered_c_df, reference_date, is_closed, comments
+            filtered_c_df, reference_date, is_closed, comments, all_authors
         ),
         MAIN_TABS.redlines: lambda: _render_redlines(
-            filtered_r_df, reference_date, is_closed
+            filtered_r_df, reference_date, is_closed, all_authors
         ),
         MAIN_TABS.moves: lambda: _render_moves(
-            filtered_m_df, reference_date, is_closed
+            filtered_m_df, reference_date, is_closed, all_authors
         ),
     }
 
     if main_tab in tab_renderers:
+        st.divider()
         tab_renderers[main_tab]()

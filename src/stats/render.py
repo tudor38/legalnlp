@@ -2,6 +2,7 @@ from datetime import datetime
 
 from src.comments.extract import Comment
 from src.stats.compute import CommentMetrics
+from src.stats.config import CFG
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -21,9 +22,18 @@ _AUTHOR_PALETTE = [
     "#bab0ac",
 ]
 
+_DATE_FMT = CFG["display"]["date_format"]
+_CARD_HEIGHT = CFG["chart"]["card_height"]
+_MARKER_SIZE = CFG["chart"]["marker_size"]
+_MARKER_OPACITY = CFG["chart"]["marker_opacity"]
+_BAR_HEIGHT_PER_ROW = CFG["chart"]["bar_height_per_row"]
+_BAR_HEIGHT_BASE = CFG["chart"]["bar_height_base"]
+_TL_HEIGHT_PER_AUTHOR = CFG["chart"]["timeline_height_per_author"]
+_TL_HEIGHT_BASE = CFG["chart"]["timeline_height_base"]
 
-def _author_color_scale(df: pd.DataFrame) -> alt.Scale:
-    authors = sorted(df["author"].unique().tolist())
+
+def _author_color_scale_from(authors: list[str]) -> alt.Scale:
+    """Build a consistent color scale from an explicit author list."""
     colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
 
@@ -42,14 +52,13 @@ def _author_color_map(authors: list[str]) -> dict[str, str]:
 def render_date_caption(
     df: pd.DataFrame, reference_date: datetime, is_closed: bool
 ) -> None:
-    """Render a 'From X → Y' caption. Y is the df max date if closed, else reference_date."""
     if df.empty:
         return
-    earliest = df["date"].min().strftime("%B %-d, %Y")
+    earliest = df["date"].min().strftime(_DATE_FMT)
     end = (
-        df["date"].max().strftime("%B %-d, %Y")
+        df["date"].max().strftime(_DATE_FMT)
         if is_closed
-        else reference_date.strftime("%B %-d, %Y")
+        else reference_date.strftime(_DATE_FMT)
     )
     st.caption(f"From {earliest} → {end}")
 
@@ -58,7 +67,6 @@ def render_date_caption(
 # Comment metrics
 # ---------------------------------------------------------------------------
 def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 3) -> None:
-    """Render Total / Open / Resolved cards from a CommentMetrics object."""
     items = [
         ("Total", metrics.total, None),
         ("Open", metrics.open, None),
@@ -66,7 +74,7 @@ def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 3) -> None:
     ]
     cols = st.columns(n_cols)
     for col, (label, value, delta) in zip(cols, items):
-        tile = col.container(border=True, height=120)
+        tile = col.container(border=True, height=_CARD_HEIGHT)
         tile.metric(label, value, delta=delta)
 
 
@@ -97,7 +105,10 @@ def render_thread_depth(comments: list[Comment]) -> None:
                 alt.Tooltip("resolved:N", title="Resolved"),
             ],
         )
-        .properties(title="Thread Depth", height=40 * len(df) + 60)
+        .properties(
+            title="Thread Depth",
+            height=40 * len(df) + _BAR_HEIGHT_BASE,
+        )
     )
     st.altair_chart(chart, width="stretch")
 
@@ -105,12 +116,18 @@ def render_thread_depth(comments: list[Comment]) -> None:
 # ---------------------------------------------------------------------------
 # Author bar
 # ---------------------------------------------------------------------------
-def render_author_bar(df: pd.DataFrame, title: str) -> None:
+def render_author_bar(
+    df: pd.DataFrame,
+    title: str,
+    all_authors: list[str] | None = None,
+) -> None:
     if df.empty:
         st.caption(f"No data for {title}.")
         return
 
-    color_scale = _author_color_scale(df)
+    authors = all_authors if all_authors else sorted(df["author"].unique().tolist())
+    color_scale = _author_color_scale_from(authors)
+
     counts = (
         df.groupby("author")
         .size()
@@ -131,7 +148,10 @@ def render_author_bar(df: pd.DataFrame, title: str) -> None:
                 alt.Tooltip("count:Q", title="Count"),
             ],
         )
-        .properties(title=title, height=50 * len(counts) + 60)
+        .properties(
+            title=title,
+            height=_BAR_HEIGHT_PER_ROW * len(counts) + _BAR_HEIGHT_BASE,
+        )
     )
     st.altair_chart(chart, width="stretch")
 
@@ -142,6 +162,7 @@ def render_author_bar(df: pd.DataFrame, title: str) -> None:
 def render_comment_timeline(
     df: pd.DataFrame,
     title: str,
+    all_authors: list[str] | None = None,
     expanded_view_key: str = "_expanded_view",
     expand_all_key: str = "_expand_all",
     show_fields_key: str = "_show_fields",
@@ -149,10 +170,6 @@ def render_comment_timeline(
     on_expand_all=None,
     on_show_fields=None,
 ) -> None:
-    """
-    Render the comment timeline scatter plot and detail table.
-    Filters are applied upstream — this function receives an already-filtered df.
-    """
     if df.empty:
         st.caption("No data matches the current filters.")
         return
@@ -162,9 +179,11 @@ def render_comment_timeline(
     rng = np.random.default_rng(42)
     df = df.copy().reset_index(drop=True)
 
-    all_authors = sorted(df["author"].unique().tolist())
-    color_map = _author_color_map(all_authors)
-    author_idx = {a: i for i, a in enumerate(all_authors)}
+    visible_authors = sorted(df["author"].unique().tolist())
+    color_authors = all_authors if all_authors else visible_authors
+    color_map = _author_color_map(color_authors)
+    author_idx = {a: i for i, a in enumerate(visible_authors)}
+
     df["jitter"] = rng.uniform(-0.3, 0.3, size=len(df))
     df["_idx"] = df.index
     df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
@@ -176,7 +195,7 @@ def render_comment_timeline(
         color="author",
         color_discrete_map=color_map,
         hover_data={
-            "date": "|%B %d, %Y",
+            "date": "|" + _DATE_FMT,
             "author": True,
             "kind": True,
             "resolved": True,
@@ -184,13 +203,13 @@ def render_comment_timeline(
             "_idx": True,
         },
         title=title,
-        height=60 * len(all_authors) + 120,
+        height=_TL_HEIGHT_PER_AUTHOR * len(visible_authors) + _TL_HEIGHT_BASE,
     )
 
     fig.update_layout(
         yaxis=dict(
-            tickvals=list(range(len(all_authors))),
-            ticktext=all_authors,
+            tickvals=list(range(len(visible_authors))),
+            ticktext=visible_authors,
             title=None,
         ),
         xaxis_title="Date",
@@ -198,7 +217,7 @@ def render_comment_timeline(
         legend_title="Author",
         modebar_add=["lasso2d", "select2d"],
     )
-    fig.update_traces(marker=dict(size=10, opacity=0.75))
+    fig.update_traces(marker=dict(size=_MARKER_SIZE, opacity=_MARKER_OPACITY))
 
     event = st.plotly_chart(fig, on_select="rerun", width="stretch")
     has_selection = bool(event and event["selection"] and event["selection"]["points"])
@@ -235,9 +254,10 @@ def render_comment_timeline(
             "paragraph",
         ]
     ].copy()
-    display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(
-        "%B %-d, %Y"
+    display["sentence"] = pd.Series(display["sentence"]).apply(
+        lambda s: " / ".join(s) if isinstance(s, list) else (s or "")
     )
+    display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(_DATE_FMT)
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
 
