@@ -257,41 +257,45 @@ if file_bytes:
         )
 
         render_comment_metrics(total + replies, resolved)
-        # render_author_bar(c_df, "Count by Author")
+
+        tab_counts, tab_timeline = st.tabs(["Counts", "Timeline"])
+        with tab_counts:
+            render_author_bar(c_df, "Count by Author")
 
         st.session_state["_p1_expanded_view"] = st.session_state["p1_expanded_view"]
         st.session_state["_p1_expand_all"] = st.session_state["p1_expand_all"]
         st.session_state["_p1_show_fields"] = st.session_state["p1_show_fields"]
 
-        render_comment_timeline(
-            filtered_c_df,
-            "Timeline",
-            expanded_view_key="_p1_expanded_view",
-            expand_all_key="_p1_expand_all",
-            show_fields_key="_p1_show_fields",
-            on_expanded_view=_store_expanded_view,
-            on_expand_all=_store_expand_all,
-            on_show_fields=_store_show_fields,
-        )
+        with tab_timeline:
+            render_comment_timeline(
+                filtered_c_df,
+                "Timeline",
+                expanded_view_key="_p1_expanded_view",
+                expand_all_key="_p1_expand_all",
+                show_fields_key="_p1_show_fields",
+                on_expanded_view=_store_expanded_view,
+                on_expand_all=_store_expand_all,
+                on_show_fields=_store_show_fields,
+            )
 
-    with tab_r:
-        if not r_df.empty:
-            earliest = r_df["date"].min().strftime("%B %-d, %Y")
-            end = reference_date.strftime("%B %-d, %Y")
-            st.caption(f"From {earliest} → {end}")
+        with tab_r:
+            if not r_df.empty:
+                earliest = r_df["date"].min().strftime("%B %-d, %Y")
+                end = reference_date.strftime("%B %-d, %Y")
+                st.caption(f"From {earliest} → {end}")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total", len(redlines))
-        col2.metric("Insertions", sum(1 for r in redlines if r.kind == "insertion"))
-        col3.metric("Deletions", sum(1 for r in redlines if r.kind == "deletion"))
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total", len(redlines))
+            col2.metric("Insertions", sum(1 for r in redlines if r.kind == "insertion"))
+            col3.metric("Deletions", sum(1 for r in redlines if r.kind == "deletion"))
 
-        render_author_bar(r_df, "Count by Author")
+            render_author_bar(r_df, "Count by Author")
 
-    with tab_m:
-        if not m_df.empty:
-            earliest = m_df["date"].min().strftime("%B %-d, %Y")
-            end = reference_date.strftime("%B %-d, %Y")
-            st.caption(f"From {earliest} → {end}")
+        with tab_m:
+            if not m_df.empty:
+                earliest = m_df["date"].min().strftime("%B %-d, %Y")
+                end = reference_date.strftime("%B %-d, %Y")
+                st.caption(f"From {earliest} → {end}")
 
-        st.metric("Total Moves", len(moves))
-        render_author_bar(m_df, "Move Count by Author")
+            st.metric("Total Moves", len(moves))
+            render_author_bar(m_df, "Move Count by Author")
