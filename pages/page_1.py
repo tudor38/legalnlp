@@ -27,6 +27,9 @@ DEFAULTS: dict = {
     "p1_expanded_view": False,
     "p1_expand_all": False,
     "p1_show_fields": ["Resolved", "Comment", "Sentence"],
+    "p1_timeline_authors": [],
+    "p1_timeline_date_min": None,
+    "p1_timeline_date_max": None,
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -65,6 +68,16 @@ def _store_expand_all():
 
 def _store_show_fields():
     st.session_state["p1_show_fields"] = st.session_state["_p1_show_fields"]
+
+
+def _store_timeline_authors():
+    st.session_state["p1_timeline_authors"] = st.session_state["_p1_timeline_authors"]
+
+
+def _store_timeline_date():
+    val = st.session_state["_p1_timeline_date"]
+    st.session_state["p1_timeline_date_min"] = val[0]
+    st.session_state["p1_timeline_date_max"] = val[1]
 
 
 # ---------------------------------------------------------------------------
@@ -169,8 +182,18 @@ if file_bytes:
         render_comment_metrics(total + replies, resolved)
         render_author_bar(c_df, "Count by Author")
 
-        # --- Timeline widget state ---
+        # Seed author filter default with all authors if not yet set
+        if not st.session_state["p1_timeline_authors"]:
+            st.session_state["_p1_timeline_authors"] = (
+                sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
+            )
+        else:
+            st.session_state["_p1_timeline_authors"] = st.session_state[
+                "p1_timeline_authors"
+            ]
+
         st.session_state["_p1_expanded_view"] = st.session_state["p1_expanded_view"]
+        st.session_state["_p1_expand_all"] = st.session_state["p1_expand_all"]
         st.session_state["_p1_show_fields"] = st.session_state["p1_show_fields"]
 
         render_comment_timeline(
@@ -179,9 +202,13 @@ if file_bytes:
             expanded_view_key="_p1_expanded_view",
             expand_all_key="_p1_expand_all",
             show_fields_key="_p1_show_fields",
+            author_filter_key="_p1_timeline_authors",
+            date_filter_key="_p1_timeline_date",
             on_expanded_view=_store_expanded_view,
             on_expand_all=_store_expand_all,
             on_show_fields=_store_show_fields,
+            on_author_filter=_store_timeline_authors,
+            on_date_filter=_store_timeline_date,
         )
 
     with tab_r:

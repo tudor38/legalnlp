@@ -139,9 +139,13 @@ def render_comment_timeline(
     expanded_view_key: str = "_expanded_view",
     expand_all_key: str = "_expand_all",
     show_fields_key: str = "_show_fields",
+    author_filter_key: str = "_timeline_authors",
+    date_filter_key: str = "_timeline_date",
     on_expanded_view=None,
     on_expand_all=None,
     on_show_fields=None,
+    on_author_filter=None,
+    on_date_filter=None,
 ) -> None:
     if df.empty:
         st.caption(f"No data for {title}.")
@@ -149,14 +153,58 @@ def render_comment_timeline(
 
     import numpy as np
 
+    all_authors = sorted(df["author"].unique().tolist())
+    date_min = df["date"].min().date()
+    date_max = df["date"].max().date()
+
+    # --- Persistent filters ---
+    col_a, col_d = st.columns([1, 2])
+
+    with col_a:
+        selected_authors = (
+            st.multiselect(
+                "Authors",
+                options=all_authors,
+                key=author_filter_key,
+                on_change=on_author_filter,
+            )
+            or all_authors
+        )
+
+    with col_d:
+        saved_min = st.session_state.get("p1_timeline_date_min") or date_min
+        saved_max = st.session_state.get("p1_timeline_date_max") or date_max
+        # Clamp saved values to actual data range in case data changed
+        saved_min = max(saved_min, date_min)
+        saved_max = min(saved_max, date_max)
+        date_range = st.slider(
+            "Date range",
+            min_value=date_min,
+            max_value=date_max,
+            value=(saved_min, saved_max),
+            key=date_filter_key,
+            on_change=on_date_filter,
+        )
+
+    # --- Apply filters ---
     rng = np.random.default_rng(42)
     df = df.copy().reset_index(drop=True)
+    df = df[
+        df["author"].isin(selected_authors)
+        & (df["date"].dt.date >= date_range[0])
+        & (df["date"].dt.date <= date_range[1])
+    ].reset_index(drop=True)
+
+    if df.empty:
+        st.caption("No data matches the current filters.")
+        return
+
     df["jitter"] = rng.uniform(-0.3, 0.3, size=len(df))
     df["_idx"] = df.index
 
-    all_authors = sorted(df["author"].unique().tolist())
-    color_map = _author_color_map(all_authors)
-    author_idx = {a: i for i, a in enumerate(all_authors)}
+    visible_authors = sorted(df["author"].unique().tolist())
+    color_map = _author_color_map(all_authors)  # use all_authors for stable colors
+    author_idx = {a: i for i, a in enumerate(visible_authors)}
     df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
 
     fig = px.scatter(
@@ -174,13 +222,13 @@ def render_comment_timeline(
             "_idx": True,
         },
         title=title,
-        height=60 * len(all_authors) + 120,
+        height=60 * len(visible_authors) + 120,
     )
 
     fig.update_layout(
         yaxis=dict(
-            tickvals=list(range(len(all_authors))),
-            ticktext=all_authors,
+            tickvals=list(range(len(visible_authors))),
+            ticktext=visible_authors,
             title=None,
         ),
         xaxis_title="Date",
@@ -223,12 +271,12 @@ def render_comment_timeline(
             "paragraph",
         ]
     ].copy()
-
     display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(
         "%B %-d, %Y"
     )
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
+
     col_view, col_expand = st.columns([1, 1])
     expanded_view = col_view.toggle(
         "Expanded view",
