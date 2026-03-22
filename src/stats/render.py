@@ -64,11 +64,10 @@ def render_date_caption(
 # ---------------------------------------------------------------------------
 # Comment metrics
 # ---------------------------------------------------------------------------
-def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 3) -> None:
+def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 2) -> None:
     items = [
         ("Total", metrics.total, None),
         ("Open", metrics.open, None),
-        ("Resolved", metrics.resolved, None),
     ]
     cols = st.columns(n_cols)
     for col, (label, value, delta) in zip(cols, items):
