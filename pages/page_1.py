@@ -17,8 +17,10 @@ from src.stats.compute import (
 from src.stats.render import (
     render_author_bar,
     render_comment_metrics,
-    render_comment_timeline,
+    render_timeline,
     render_date_caption,
+    COMMENT_FIELDS,
+    REDLINE_FIELDS,
 )
 from src.stats.config import CFG
 
@@ -40,8 +42,14 @@ class CommentViews(NamedTuple):
     timeline: str
 
 
+class RedlineViews(NamedTuple):
+    counts: str
+    timeline: str
+
+
 MAIN_TABS = MainTabs(*CFG["pages"]["page_1"]["tabs"]["main"])
 COMMENT_VIEWS = CommentViews(*CFG["pages"]["page_1"]["tabs"]["comment_views"])
+REDLINE_VIEWS = RedlineViews(*CFG["pages"]["page_1"]["tabs"]["redline_views"])
 
 
 # ---------------------------------------------------------------------------
@@ -52,14 +60,22 @@ DEFAULTS: dict = {
     "p1_closed_date": None,
     "p1_file_bytes": None,
     "p1_file_name": None,
+    # comment timeline
     "p1_expanded_view": False,
     "p1_expand_all": False,
     "p1_show_fields": ["Resolved", "Sentence", "Comment"],
+    # redline timeline
+    "p1_r_expanded_view": False,
+    "p1_r_expand_all": False,
+    "p1_r_show_fields": ["Redline", "Sentence"],
+    # filters
     "p1_timeline_authors": [],
     "p1_date_min": None,
     "p1_date_max": None,
+    # tabs
     "p1_main_tab": MAIN_TABS.comments,
     "p1_comment_tab": COMMENT_VIEWS.counts,
+    "p1_redline_tab": REDLINE_VIEWS.counts,
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -70,8 +86,6 @@ for key, val in DEFAULTS.items():
 # Session state helpers
 # ---------------------------------------------------------------------------
 def _make_store(perm_key: str, default=None):
-    """Return a callback that copies the widget temp key into the permanent key."""
-
     def callback():
         st.session_state[perm_key] = st.session_state.get(f"_{perm_key}", default)
 
@@ -79,7 +93,6 @@ def _make_store(perm_key: str, default=None):
 
 
 def _seed(perm_key: str) -> None:
-    """Copy permanent key → temp key before a widget renders."""
     st.session_state[f"_{perm_key}"] = st.session_state[perm_key]
 
 
@@ -88,9 +101,13 @@ _store_closed_date = _make_store("p1_closed_date", None)
 _store_expanded_view = _make_store("p1_expanded_view", False)
 _store_expand_all = _make_store("p1_expand_all", False)
 _store_show_fields = _make_store("p1_show_fields", [])
+_store_r_expanded_view = _make_store("p1_r_expanded_view", False)
+_store_r_expand_all = _make_store("p1_r_expand_all", False)
+_store_r_show_fields = _make_store("p1_r_show_fields", [])
 _store_timeline_authors = _make_store("p1_timeline_authors", [])
 _store_main_tab = _make_store("p1_main_tab", MAIN_TABS.comments)
 _store_comment_tab = _make_store("p1_comment_tab", COMMENT_VIEWS.counts)
+_store_redline_tab = _make_store("p1_redline_tab", REDLINE_VIEWS.counts)
 
 
 def _store_date_range():
@@ -109,7 +126,6 @@ def _store_uploaded_file():
         for key, val in DEFAULTS.items():
             if key not in ("p1_file_bytes", "p1_file_name"):
                 st.session_state[key] = val
-        # Clear widget state so slider/multiselect reinitialize from scratch
         for widget_key in (
             "_p1_date_range",
             "_p1_timeline_authors",
@@ -117,9 +133,13 @@ def _store_uploaded_file():
             "_p1_closed_date",
             "_p1_main_tab",
             "_p1_comment_tab",
+            "_p1_redline_tab",
             "_p1_expanded_view",
             "_p1_expand_all",
             "_p1_show_fields",
+            "_p1_r_expanded_view",
+            "_p1_r_expand_all",
+            "_p1_r_show_fields",
         ):
             if widget_key in st.session_state:
                 del st.session_state[widget_key]
@@ -146,16 +166,6 @@ def _load_document(file_bytes: bytes) -> tuple:
 def _sidebar_controls(
     comments, redlines, all_dfs: list[pd.DataFrame]
 ) -> tuple[datetime, bool, tuple, list[str]]:
-    """
-    Render sidebar controls.
-
-    Returns
-    -------
-    reference_date   : datetime
-    is_closed        : bool
-    date_range       : tuple[date, date]
-    selected_authors : list[str]
-    """
     st.sidebar.markdown("### Document")
     _seed("p1_is_closed")
     is_closed = st.sidebar.toggle(
@@ -235,15 +245,27 @@ def _sidebar_controls(
 # ---------------------------------------------------------------------------
 # Tab renderers
 # ---------------------------------------------------------------------------
-def _render_timeline(
+def _render_comment_timeline(
     filtered_c_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
     for key in ("p1_expanded_view", "p1_expand_all", "p1_show_fields"):
         _seed(key)
-    render_comment_timeline(
+    render_timeline(
         filtered_c_df,
-        "Who commented and when?",
+        "Who commented? When?",
+        fields=COMMENT_FIELDS,
+        display_cols=[
+            "author",
+            "date",
+            "kind",
+            "resolved",
+            "comment",
+            "selected",
+            "sentence",
+            "paragraph",
+        ],
+        default_fields=["Resolved", "Sentence", "Comment"],
         all_authors=all_authors,
         expanded_view_key="_p1_expanded_view",
         expand_all_key="_p1_expand_all",
@@ -251,6 +273,28 @@ def _render_timeline(
         on_expanded_view=_store_expanded_view,
         on_expand_all=_store_expand_all,
         on_show_fields=_store_show_fields,
+    )
+
+
+def _render_redline_timeline(
+    filtered_r_df: pd.DataFrame,
+    all_authors: list[str],
+) -> None:
+    for key in ("p1_r_expanded_view", "p1_r_expand_all", "p1_r_show_fields"):
+        _seed(key)
+    render_timeline(
+        filtered_r_df,
+        "Who redlined? When?",
+        fields=REDLINE_FIELDS,
+        display_cols=["author", "date", "kind", "text", "sentence", "paragraph"],
+        default_fields=["Redline", "Sentence"],
+        all_authors=all_authors,
+        expanded_view_key="_p1_r_expanded_view",
+        expand_all_key="_p1_r_expand_all",
+        show_fields_key="_p1_r_show_fields",
+        on_expanded_view=_store_r_expanded_view,
+        on_expand_all=_store_r_expand_all,
+        on_show_fields=_store_r_show_fields,
     )
 
 
@@ -278,7 +322,9 @@ def _render_comments(
         COMMENT_VIEWS.counts: lambda: render_author_bar(
             filtered_c_df, "Who commented? How much?", all_authors=all_authors
         ),
-        COMMENT_VIEWS.timeline: lambda: _render_timeline(filtered_c_df, all_authors),
+        COMMENT_VIEWS.timeline: lambda: _render_comment_timeline(
+            filtered_c_df, all_authors
+        ),
     }
     if comment_tab in comment_view_renderers:
         comment_view_renderers[comment_tab]()
@@ -291,6 +337,7 @@ def _render_redlines(
     all_authors: list[str],
 ) -> None:
     render_date_caption(filtered_r_df, reference_date, is_closed)
+
     col1, col2, col3 = st.columns(3)
     col1.metric("Total", len(filtered_r_df), border=True)
     col2.metric(
@@ -307,7 +354,27 @@ def _render_redlines(
         else 0,
         border=True,
     )
-    render_author_bar(filtered_r_df, "Who redlined? How much?", all_authors=all_authors)
+
+    _seed("p1_redline_tab")
+    redline_tab = st.pills(
+        "View",
+        list(REDLINE_VIEWS),
+        key="_p1_redline_tab",
+        on_change=_store_redline_tab,
+        selection_mode="single",
+        label_visibility="collapsed",
+    )
+
+    redline_view_renderers = {
+        REDLINE_VIEWS.counts: lambda: render_author_bar(
+            filtered_r_df, "Who redlined? How much?", all_authors=all_authors
+        ),
+        REDLINE_VIEWS.timeline: lambda: _render_redline_timeline(
+            filtered_r_df, all_authors
+        ),
+    }
+    if redline_tab in redline_view_renderers:
+        redline_view_renderers[redline_tab]()
 
 
 def _render_moves(
@@ -318,7 +385,9 @@ def _render_moves(
 ) -> None:
     render_date_caption(filtered_m_df, reference_date, is_closed)
     st.metric("Total Moves", len(filtered_m_df))
-    render_author_bar(filtered_m_df, "How moved text? How much?", all_authors=all_authors)
+    render_author_bar(
+        filtered_m_df, "How moved text? How much?", all_authors=all_authors
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +405,6 @@ file_bytes = st.session_state["p1_file_bytes"]
 if file_bytes:
     comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
 
-    # Initial compute with now() to populate sidebar date slider
     c_df = comment_ages_df(comments, datetime.now())
     r_df = redline_ages_df(redlines, datetime.now())
     m_df = move_ages_df(moves, datetime.now())
@@ -345,15 +413,12 @@ if file_bytes:
         comments, redlines, [c_df, r_df, m_df]
     )
 
-    # Recompute with correct reference_date
     c_df = comment_ages_df(comments, reference_date)
     r_df = redline_ages_df(redlines, reference_date)
     m_df = move_ages_df(moves, reference_date)
 
-    # Global author list — from unfiltered c_df for stable colors
     all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
 
-    # Apply filters once
     filtered_c_df = filter_by_date(c_df, date_range[0], date_range[1])
     if not filtered_c_df.empty and selected_authors:
         filtered_c_df = filtered_c_df[
@@ -362,7 +427,6 @@ if file_bytes:
     filtered_r_df = filter_by_date(r_df, date_range[0], date_range[1])
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
 
-    # --- Main tab ---
     _seed("p1_main_tab")
     main_tab = st.pills(
         "Section",

@@ -147,6 +147,11 @@ def redline_ages_df(
                     "age_days": (now - dt).days,
                     "date": dt,
                     "kind": r.kind,
+                    "text": r.text,
+                    "sentence": [s.text for s in r.context.sentences]
+                    if r.context
+                    else [],
+                    "paragraph": r.context.paragraph_text if r.context else None,
                 }
             )
         except ValueError:
@@ -373,67 +378,3 @@ class PassageActivity:
     move_count: int
     total_activity: int
     authors: set[str]
-
-
-def problematic_passages(
-    comments: list[Comment],
-    redlines: list[Redline],
-    moves: list[Move],
-    all_paragraphs: list[str],
-    min_activity: int = 1,
-) -> list[PassageActivity]:
-    activity: dict[int, dict] = {
-        i: {
-            "comment_count": 0,
-            "redline_count": 0,
-            "insertion_count": 0,
-            "deletion_count": 0,
-            "move_count": 0,
-            "authors": set(),
-        }
-        for i in range(len(all_paragraphs))
-    }
-
-    for c in comments:
-        if c.context:
-            for idx in range(c.context.start_para_idx, c.context.end_para_idx + 1):
-                if idx in activity:
-                    activity[idx]["comment_count"] += 1
-                    activity[idx]["authors"].add(c.author)
-
-    for r in redlines:
-        if r.context:
-            idx = r.context.para_idx
-            if idx in activity:
-                activity[idx]["redline_count"] += 1
-                activity[idx]["authors"].add(r.author)
-                if r.kind == "insertion":
-                    activity[idx]["insertion_count"] += 1
-                else:
-                    activity[idx]["deletion_count"] += 1
-
-    for m in moves:
-        idx = m.to_para_idx
-        if idx in activity:
-            activity[idx]["move_count"] += 1
-            activity[idx]["authors"].add(m.author)
-
-    results = []
-    for i, acc in activity.items():
-        total = acc["comment_count"] + acc["redline_count"] + acc["move_count"]
-        if total >= min_activity:
-            results.append(
-                PassageActivity(
-                    para_idx=i,
-                    paragraph=all_paragraphs[i],
-                    comment_count=acc["comment_count"],
-                    redline_count=acc["redline_count"],
-                    insertion_count=acc["insertion_count"],
-                    deletion_count=acc["deletion_count"],
-                    move_count=acc["move_count"],
-                    total_activity=total,
-                    authors=acc["authors"],
-                )
-            )
-
-    return sorted(results, key=lambda p: p.total_activity, reverse=True)

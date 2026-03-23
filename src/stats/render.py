@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import NamedTuple
 
 from src.comments.extract import Comment
 from src.stats.compute import CommentMetrics
@@ -9,18 +10,18 @@ import altair as alt
 import plotly.express as px
 from src.comments.render import render_paragraph_with_highlight
 
-# keeping author colors consistent across all chart libraries
+# Tableau10 desaturated — consistent across Altair and Plotly
 _AUTHOR_PALETTE = [
-    "#7fa7c9",  # blue      (was #4e79a7)
-    "#f5b97a",  # orange    (was #f28e2b)
-    "#e88b8c",  # red       (was #e15759)
-    "#9dcdc9",  # teal      (was #76b7b2)
-    "#8dbc8a",  # green     (was #59a14f)
-    "#f2d97e",  # yellow    (was #edc948)
-    "#c9a3c4",  # purple    (was #b07aa1)
-    "#ffbfc8",  # pink      (was #ff9da7)
-    "#c0a08a",  # brown     (was #9c755f)
-    "#d0ccc8",  # gray      (was #bab0ac)
+    "#7fa7c9",
+    "#f5b97a",
+    "#e88b8c",
+    "#9dcdc9",
+    "#8dbc8a",
+    "#f2d97e",
+    "#c9a3c4",
+    "#ffbfc8",
+    "#c0a08a",
+    "#d0ccc8",
 ]
 
 _DATE_FMT = CFG["display"]["date_format"]
@@ -34,14 +35,39 @@ _TL_HEIGHT_BASE = CFG["chart"]["timeline_height_base"]
 
 
 def _author_color_scale_from(authors: list[str]) -> alt.Scale:
-    """Build an Altair color scale from an explicit sorted author list."""
     colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
 
 
 def _author_color_map(authors: list[str]) -> dict[str, str]:
-    """Build a Plotly color map from an explicit sorted author list."""
     return {a: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i, a in enumerate(authors)}
+
+
+# ---------------------------------------------------------------------------
+# Timeline field config
+# ---------------------------------------------------------------------------
+class TimelineField(NamedTuple):
+    """Maps a display label to a DataFrame column and an optional highlight column."""
+
+    label: str
+    col: str
+    highlight: str | None = None  # column to use for paragraph highlight
+
+
+# Pre-built field configs for comments and redlines
+COMMENT_FIELDS: list[TimelineField] = [
+    TimelineField("Resolved", "Resolved", None),
+    TimelineField("Comment", "Comment", None),
+    TimelineField("Selected", "Selected", "Selected"),
+    TimelineField("Sentence", "Sentence", "Selected"),
+    TimelineField("Paragraph", "Paragraph", "Selected"),
+]
+
+REDLINE_FIELDS: list[TimelineField] = [
+    TimelineField("Redline", "Text", None),
+    TimelineField("Sentence", "Sentence", "Text"),
+    TimelineField("Paragraph", "Paragraph", "Text"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +180,14 @@ def render_author_bar(
 
 
 # ---------------------------------------------------------------------------
-# Comment timeline
+# Generalized timeline
 # ---------------------------------------------------------------------------
-def render_comment_timeline(
+def render_timeline(
     df: pd.DataFrame,
     title: str,
+    fields: list[TimelineField],
+    display_cols: list[str],  # df columns to include in table
+    default_fields: list[str],  # default multiselect selection
     all_authors: list[str] | None = None,
     expanded_view_key: str = "_expanded_view",
     expand_all_key: str = "_expand_all",
@@ -167,6 +196,16 @@ def render_comment_timeline(
     on_expand_all=None,
     on_show_fields=None,
 ) -> None:
+    """
+    Generalized timeline scatter + detail table.
+
+    Parameters
+    ----------
+    fields         : list of TimelineField defining available fields for the
+                     expanded view and multiselect options
+    display_cols   : df columns to pull into the display table
+    default_fields : which field labels are selected by default
+    """
     if df.empty:
         st.caption("No data matches the current filters.")
         return
@@ -185,20 +224,24 @@ def render_comment_timeline(
     df["_idx"] = df.index
     df["y_jittered"] = df.apply(lambda r: author_idx[r["author"]] + r["jitter"], axis=1)
 
+    hover_data: dict = {
+        "date": "|" + _DATE_FMT,
+        "author": True,
+        "y_jittered": False,
+    }
+    if "resolved" in df.columns:
+        hover_data["resolved"] = True
+    if "kind" in df.columns:
+        hover_data["kind"] = True
+    hover_data["_idx"] = True
+
     fig = px.scatter(
         df,
         x="date",
         y="y_jittered",
         color="author",
         color_discrete_map=color_map,
-        hover_data={
-            "date": "|" + _DATE_FMT,
-            "author": True,
-            "kind": True,
-            "resolved": True,
-            "y_jittered": False,
-            "_idx": True,
-        },
+        hover_data=hover_data,
         title=title,
         height=_TL_HEIGHT_PER_AUTHOR * len(visible_authors) + _TL_HEIGHT_BASE,
     )
@@ -227,37 +270,27 @@ def render_comment_timeline(
 
     if has_selection:
         total_sel = len(selected)
-        resolved_sel = int(selected["resolved"].sum())
         authors_sel = int(selected["author"].nunique())
-        comments_sel = int((selected["kind"] == "comment").sum())
-        replies_sel = int((selected["kind"] == "reply").sum())
 
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Selected", total_sel)
-        col2.metric("Authors", authors_sel)
-        col3.metric("Comments", comments_sel)
-        col4.metric("Replies", replies_sel)
-        col5.metric("Resolved", f"{resolved_sel}")
+        cols = st.columns(2)
+        cols[0].metric("Selected", total_sel)
+        cols[1].metric("Authors", authors_sel)
 
-    display = selected[
-        [
-            "author",
-            "date",
-            "kind",
-            "resolved",
-            "comment",
-            "selected",
-            "sentence",
-            "paragraph",
-        ]
-    ].copy()
-    display["sentence"] = pd.Series(display["sentence"]).apply(
-        lambda s: " / ".join(s) if isinstance(s, list) else (s or "")
-    )
+    # Build display table
+    valid_cols = [c for c in display_cols if c in df.columns]
+    display = selected[valid_cols].copy()
+
+    # Join sentence lists to string
+    if "sentence" in display.columns:
+        display["sentence"] = pd.Series(display["sentence"]).apply(
+            lambda s: " / ".join(s) if isinstance(s, list) else (s or "")
+        )
+
     display["date"] = pd.to_datetime(pd.Series(display["date"])).dt.strftime(_DATE_FMT)
     display.columns = [c.capitalize() for c in display.columns]
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
 
+    # Table controls
     col_view, col_expand = st.columns([1, 1])
     expanded_view = col_view.toggle(
         "Expanded view",
@@ -274,58 +307,59 @@ def render_comment_timeline(
         else False
     )
 
-    ALL_FIELDS = ["Resolved", "Comment", "Selected", "Sentence", "Paragraph"]
+    all_field_labels = [f.label for f in fields]
     show_fields = st.multiselect(
         "Fields to show",
-        options=ALL_FIELDS,
+        options=all_field_labels,
         key=show_fields_key,
         on_change=on_show_fields,
     )
+
+    # Build label → TimelineField lookup
+    field_map = {f.label: f for f in fields}
 
     if expanded_view:
         for _, row in display.iterrows():
             if not show_fields:
                 break
+            kind_label = f" · {row['Kind']}" if "Kind" in display.columns else ""
             with st.expander(
-                f"{row['Author']} · {row['Date']} · {row['Kind']}", expanded=expand_all
+                f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all
             ):
+                for label in show_fields:
+                    tf = field_map.get(label)
+                    if tf is None:
+                        continue
+                    col_name = tf.col
+                    hl_name = tf.highlight
 
-                def render_field(field: str) -> None:
-                    match field:
-                        case "Resolved":
-                            st.markdown(
-                                f"**Resolved:** {'Yes' if row['Resolved'] else 'No'}"
-                            )
-                        case "Comment":
-                            st.markdown(f"**Comment:** {row['Comment']}")
-                        case "Selected" if row["Selected"]:
-                            st.markdown("**Selected:**")
-                            render_paragraph_with_highlight(
-                                row["Selected"], row["Selected"]
-                            )
-                        case "Sentence" if row["Sentence"]:
-                            st.markdown("**Sentence:**")
-                            sentences = (
-                                row["Sentence"]
-                                if isinstance(row["Sentence"], list)
-                                else [row["Sentence"]]
-                            )
-                            for sent in sentences:
-                                render_paragraph_with_highlight(sent, row["Selected"])
-                        case "Paragraph" if row["Paragraph"]:
-                            st.markdown("**Paragraph:**")
-                            render_paragraph_with_highlight(
-                                row["Paragraph"], row["Selected"]
-                            )
+                    if col_name not in display.columns:
+                        continue
 
-                for field in show_fields:
-                    render_field(field)
+                    val = row[col_name]
+                    if not val and val != 0:
+                        continue
+
+                    if col_name == "Resolved":
+                        st.markdown(f"**Resolved:** {'Yes' if val else 'No'}")
+                    elif hl_name and hl_name in display.columns:
+                        hl_val = row[hl_name]
+                        st.markdown(f"**{label}:**")
+                        items = val if isinstance(val, list) else [val]
+                        for item in items:
+                            render_paragraph_with_highlight(item, hl_val or "")
+                    else:
+                        st.markdown(f"**{label}:** {val}")
     else:
         if show_fields:
-            cols = ["Author", "Date", "Kind"] + [
-                f for f in show_fields if f in display.columns
-            ]
+            keep_cols = ["Author", "Date"]
+            if "Kind" in display.columns:
+                keep_cols.append("Kind")
+            for label in show_fields:
+                tf = field_map.get(label)
+                if tf and tf.col.capitalize() in display.columns:
+                    keep_cols.append(tf.col.capitalize())
             st.dataframe(
-                display[[c for c in cols if c in display.columns]],
+                display[[c for c in keep_cols if c in display.columns]],
                 hide_index=True,
             )
