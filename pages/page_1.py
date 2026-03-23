@@ -93,22 +93,40 @@ _store_main_tab = _make_store("p1_main_tab", MAIN_TABS.comments)
 _store_comment_tab = _make_store("p1_comment_tab", COMMENT_VIEWS.counts)
 
 
-def _store_uploaded_file():
-    f = st.session_state.get("_p1_uploaded_file")
-    if f is not None:
-        st.session_state["p1_file_bytes"] = f.read()
-        st.session_state["p1_file_name"] = f.name
-        f.seek(0)
-    else:
-        st.session_state["p1_file_bytes"] = None
-        st.session_state["p1_file_name"] = None
-
-
 def _store_date_range():
     val = st.session_state.get("_p1_date_range")
     if val:
         st.session_state["p1_date_min"] = val[0]
         st.session_state["p1_date_max"] = val[1]
+
+
+def _store_uploaded_file():
+    f = st.session_state.get("_p1_uploaded_file")
+    if f is not None:
+        st.cache_data.clear()
+        st.session_state["p1_file_bytes"] = f.read()
+        st.session_state["p1_file_name"] = f.name
+        for key, val in DEFAULTS.items():
+            if key not in ("p1_file_bytes", "p1_file_name"):
+                st.session_state[key] = val
+        # Clear widget state so slider/multiselect reinitialize from scratch
+        for widget_key in (
+            "_p1_date_range",
+            "_p1_timeline_authors",
+            "_p1_is_closed",
+            "_p1_closed_date",
+            "_p1_main_tab",
+            "_p1_comment_tab",
+            "_p1_expanded_view",
+            "_p1_expand_all",
+            "_p1_show_fields",
+        ):
+            if widget_key in st.session_state:
+                del st.session_state[widget_key]
+        f.seek(0)
+    else:
+        st.session_state["p1_file_bytes"] = None
+        st.session_state["p1_file_name"] = None
 
 
 # ---------------------------------------------------------------------------
