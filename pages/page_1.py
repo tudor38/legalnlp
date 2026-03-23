@@ -276,7 +276,7 @@ def _render_comments(
 
     comment_view_renderers = {
         COMMENT_VIEWS.counts: lambda: render_author_bar(
-            filtered_c_df, "Who commented and how much?", all_authors=all_authors
+            filtered_c_df, "Who commented? How much?", all_authors=all_authors
         ),
         COMMENT_VIEWS.timeline: lambda: _render_timeline(filtered_c_df, all_authors),
     }
@@ -307,7 +307,7 @@ def _render_redlines(
         else 0,
         border=True,
     )
-    render_author_bar(filtered_r_df, "Count by Author", all_authors=all_authors)
+    render_author_bar(filtered_r_df, "Who redlined? How much?", all_authors=all_authors)
 
 
 def _render_moves(
@@ -318,7 +318,7 @@ def _render_moves(
 ) -> None:
     render_date_caption(filtered_m_df, reference_date, is_closed)
     st.metric("Total Moves", len(filtered_m_df))
-    render_author_bar(filtered_m_df, "Move Count by Author", all_authors=all_authors)
+    render_author_bar(filtered_m_df, "How moved text? How much?", all_authors=all_authors)
 
 
 # ---------------------------------------------------------------------------
