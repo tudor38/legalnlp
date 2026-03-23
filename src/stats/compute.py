@@ -24,23 +24,6 @@ class DocumentData:
 
 
 # ---------------------------------------------------------------------------
-# Filtered data container
-# ---------------------------------------------------------------------------
-@dataclass
-class FilteredData:
-    """
-    Age DataFrames after applying date range and author filters.
-    All three share the same date_range; c_df may be further filtered by author.
-    """
-
-    c_df: pd.DataFrame
-    r_df: pd.DataFrame
-    m_df: pd.DataFrame
-    date_range: tuple[date, date]
-    selected_authors: list[str]
-
-
-# ---------------------------------------------------------------------------
 # Comment metrics
 # ---------------------------------------------------------------------------
 @dataclass
