@@ -10,6 +10,10 @@ from src.comments.extract import extract_paragraphs
 # label order for cross-encoder NLI models (MNLI convention)
 _NLI_LABELS = ["Contradicting", "Supporting", "Neutral"]
 _LABEL_SORT_ORDER = {"Supporting": 0, "Contradicting": 1, "Neutral": 2}
+_LABEL_DISPLAY = {
+    "Supporting": '<span style="color:#2e7d32;font-weight:600">✓ Supporting</span>',
+    "Contradicting": '<span style="color:#c62828;font-weight:600">✗ Contradicting</span>',
+}
 
 
 
@@ -63,19 +67,21 @@ min_confidence = st.sidebar.slider(
 )
 
 # Main
-st.subheader("Position Check")
-st.markdown(
-    "Validate your **position** against the **text**:\n\n"
-    "- **Supporting:** clauses that back you up.\n\n"
-    "- **Contradicting:** clauses that push back."
-)
+st.subheader("Find Basis")
 
-hypothesis = st.text_input(
-    "Position",
+hypothesis = st.text_area(
+    "State your claim",
     key="p2_custom",
     label_visibility="collapsed",
-    placeholder="State a position, e.g. 'The Receiving Party is permitted to keep some confidential data after the contract ends.'",
+    placeholder="State a proposition, e.g. 'The Receiving Party can keep some confidential data after the contract ends.'",
+    height=100,
 ).strip()
+
+st.caption(
+    "Returns <span style='color:#2e7d32;font-weight:600'>✓ supporting</span> and "
+    "<span style='color:#c62828;font-weight:600'>✗ contradicting</span> passages from the document. No generated content.",
+    unsafe_allow_html=True,
+)
 
 if not hypothesis:
     st.stop()
@@ -134,7 +140,7 @@ if st.checkbox("Show expanded view", key="p2_print_markdown", value=False):
         lines: list[str] = []
         for _, row in results_df.iterrows():
             lines.append(
-                f"#### ¶{int(row['idx'])} — {row['label']} ({row['score']:.3f})\n\n"
+                f"#### ¶{int(row['idx'])} — {_LABEL_DISPLAY.get(row['label'], row['label'])} ({row['score']:.3f})\n\n"
                 f"{row['passage']}"
             )
-        st.markdown("\n\n---\n\n".join(lines))
+        st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)

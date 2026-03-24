@@ -70,11 +70,15 @@ def _embed_docs(docs: tuple[str, ...], embedding_model_name: str) -> np.ndarray:
 
 @st.cache_resource(show_spinner=False)
 def _fit_topics(
-    docs: tuple[str, ...], embeddings: np.ndarray, min_topic_size: int
+    docs: tuple[str, ...],
+    embeddings: np.ndarray,
+    min_topic_size: int,
+    seed_topic_list: tuple[tuple[str, ...], ...] | None = None,
 ) -> tuple[BERTopic, list[int]]:
     model = BERTopic(
         min_topic_size=min_topic_size,
         vectorizer_model=CountVectorizer(stop_words="english"),
+        seed_topic_list=[list(group) for group in seed_topic_list] if seed_topic_list else None,
         calculate_probabilities=False,
         verbose=False,
     )
@@ -101,6 +105,38 @@ def _default_granularity(n_docs: int) -> tuple[int, int, int]:
     medium = min(medium, coarse)
     fine = min(fine, medium)
     return coarse, medium, fine
+
+
+_TOPIC_PALETTE = [
+    "#ffe066", "#b5ead7", "#b5d5ff", "#e8b5ff", "#ffb5b5",
+    "#ffd9b5", "#b5ffe4", "#c9ffb5", "#ffb5e8", "#b5f0ff",
+]
+
+
+def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
+    unique = [l for l in dict.fromkeys(label_layer) if l != "Noise"]
+    return {label: _TOPIC_PALETTE[i % len(_TOPIC_PALETTE)] for i, label in enumerate(unique)}
+
+
+def _highlight_topic_keywords(text: str, topic_label: str, color: str) -> str:
+    """Highlight words from the topic label in the text using a topic-specific color."""
+    if not topic_label or topic_label == "Noise":
+        return text
+    stemmed_keywords = {
+        _stemmer.stemWord(w.lower())
+        for w in topic_label.split()
+        if w.lower() not in STOP_WORDS and len(w) > 2
+    }
+    if not stemmed_keywords:
+        return text
+
+    def _replace(m: re.Match) -> str:
+        word = m.group(0)
+        if _stemmer.stemWord(word.lower()) in stemmed_keywords:
+            return f'<mark style="background:{color}">{word}</mark>'
+        return word
+
+    return re.sub(r"\b\w+\b", _replace, text)
 
 
 def _highlight_term(text: str, query: str) -> str:
@@ -212,6 +248,7 @@ if len(docs) < 12:
     st.stop()
 
 st.subheader("Topic Explorer")
+st.markdown("#### Search")
 search_query = st.text_input(
     "Filter text",
     label_visibility="collapsed",
@@ -220,13 +257,13 @@ search_query = st.text_input(
 )
 search_method = st.pills(
     "Search type",
-    options=["Exact", "Regex", "Relevance", "Semantic"],
-    default="Exact",
+    options=["Keyword", "Regex", "Relevance", "Semantic"],
+    default="Keyword",
     key="p3_search_method",
     label_visibility="collapsed",
     selection_mode="single",
-) or "Exact"
-if search_method != "Exact":
+) or "Keyword"
+if search_method != "Keyword":
     st.sidebar.markdown("### Search")
     rank_limit = st.sidebar.slider(
         "Result limit",
@@ -285,6 +322,29 @@ fine_size = st.sidebar.slider(
 
 granularity_sizes = sorted({coarse_size, medium_size, fine_size}, reverse=True)
 
+with st.sidebar.expander("Seed words (advanced)", expanded=False):
+    st.caption(
+        "Guide topics by entering seed words — one group per line, words separated by commas.\n\n"
+        "Example:\n```\nprivacy, personal data, consent\nliability, damages\ntermination, expiry\n```"
+    )
+    seed_words_raw = st.text_area(
+        "Seed words",
+        label_visibility="collapsed",
+        key="p3_seed_words",
+        placeholder="privacy, personal data, consent\nliability, damages\ntermination, expiry",
+        height=120,
+    )
+
+seed_topic_list: tuple[tuple[str, ...], ...] | None = None
+if seed_words_raw and seed_words_raw.strip():
+    parsed = tuple(
+        tuple(w.strip() for w in line.split(",") if w.strip())
+        for line in seed_words_raw.strip().splitlines()
+        if line.strip()
+    )
+    if parsed:
+        seed_topic_list = parsed
+
 with st.spinner("Embedding and modeling topics..."):
     docs_tuple = tuple(docs)
     embeddings = _embed_docs(docs_tuple, embedding_model_name)
@@ -297,7 +357,7 @@ with st.spinner("Embedding and modeling topics..."):
     label_layers: list[np.ndarray] = []
     topic_counts: list[int] = []
     for min_topic_size in granularity_sizes:
-        topic_model, topics = _fit_topics(docs_tuple, embeddings, min_topic_size)
+        topic_model, topics = _fit_topics(docs_tuple, embeddings, min_topic_size, seed_topic_list)
         labels = _topic_labels(topic_model, topics)
         label_layers.append(labels)
         n_topics = len({t for t in topics if t != -1})
@@ -325,7 +385,7 @@ if has_noise:
 score_map: dict[int, float] = {}
 if not normalized_query:
     matched_indices = list(range(len(docs)))
-elif search_method == "Exact":
+elif search_method == "Keyword":
     matched_indices = [idx for idx, text in enumerate(docs) if normalized_query in text.lower()]
 elif search_method == "Regex":
     try:
@@ -392,6 +452,7 @@ window.openDoc = function(paraIdx) {{
 
     plot_html = str(plot).replace("</body>", inject_script + "</body>", 1)
 
+    st.markdown("#### Map")
     expanded = len(matched_indices) >= 100
     with st.expander("Topic map", expanded=expanded):
         components.html(plot_html, height=860, scrolling=False)
@@ -418,7 +479,32 @@ if score_map:
     results_df["score"] = results_df["paragraph_idx"].map(score_map)
     results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
 
-st.caption(f"{len(results_df)} matching text")
+st.divider()
+st.markdown("#### Filter")
+available_topic_cols = [col for col in topic_columns if col in results_df.columns]
+if available_topic_cols and not results_df.empty:
+    fcol1, fcol2 = st.columns([1, 3])
+    filter_col = fcol1.selectbox(
+        "Granularity",
+        options=available_topic_cols,
+        index=len(available_topic_cols) - 1,
+        key="p3_topic_filter_col",
+        label_visibility="collapsed",
+    )
+    topic_options = sorted(t for t in results_df[filter_col].unique() if t != "Noise")
+    selected_topics = fcol2.multiselect(
+        "Topics",
+        options=topic_options,
+        default=[],
+        key="p3_topic_filter_values",
+        placeholder=f"Select {filter_col.lower()}…",
+        label_visibility="collapsed",
+    )
+    if selected_topics:
+        results_df = results_df[results_df[filter_col].isin(selected_topics)].reset_index(drop=True)
+
+st.markdown("#### Results")
+st.caption(f"{len(results_df)} passages")
 st.dataframe(
     results_df.head(max_rows),
     width="stretch",
@@ -442,22 +528,31 @@ if show_markdown:
     if shown_df.empty:
         st.markdown("_No matching rows._")
     else:
+        finest_labels = label_layers[-1]
+        color_map = _topic_color_map(finest_labels)
         lines: list[str] = []
         for _, row in shown_df.iterrows():
+            para_idx = int(row["paragraph_idx"])
+            text = str(row["text"])
+            # Search query highlighting
             if search_method in ("Relevance", "Semantic"):
-                highlighted = _highlight_query_tokens(str(row["text"]), search_query)
+                highlighted = _highlight_query_tokens(text, search_query)
             elif search_method == "Regex":
                 try:
                     highlighted = re.compile(search_query.strip(), flags=re.IGNORECASE).sub(
-                        lambda m: f"<mark>{m.group(0)}</mark>", str(row["text"])
+                        lambda m: f"<mark>{m.group(0)}</mark>", text
                     )
                 except re.error:
-                    highlighted = str(row["text"])
+                    highlighted = text
             else:
-                highlighted = _highlight_term(str(row["text"]), search_query)
+                highlighted = _highlight_term(text, search_query)
+            # Topic keyword highlighting (on top of search highlighting)
+            topic_label = finest_labels[para_idx] if para_idx < len(finest_labels) else ""
+            color = color_map.get(str(topic_label), "#ffe066")
+            highlighted = _highlight_topic_keywords(highlighted, str(topic_label), color)
             topics = " → ".join(f"{row[col]}" for col in topic_cols)
             lines.append(
-                f"#### ¶{row['paragraph_idx']} — {topics}\n\n"
+                f"#### ¶{para_idx} — {topics}\n\n"
                 f"{highlighted}"
             )
         st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)

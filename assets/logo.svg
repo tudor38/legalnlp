@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#e879f9"/>
+      <stop offset="50%"  stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <!-- Diamond 1 (large, center) -->
+  <polygon points="24,6 38,24 24,42 10,24"
+           fill="none" stroke="url(#g)" stroke-width="1.8" stroke-linejoin="round"/>
+  <!-- Diamond 2 (medium, upper-right offset) -->
+  <polygon points="28,10 38,20 28,30 18,20"
+           fill="none" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round" opacity="0.55"/>
+  <!-- Diamond 3 (small inner, filled) -->
+  <polygon points="24,16 31,24 24,32 17,24"
+           fill="url(#g)" opacity="0.2"/>
+  <polygon points="24,16 31,24 24,32 17,24"
+           fill="none" stroke="url(#g)" stroke-width="1" stroke-linejoin="round" opacity="0.8"/>
+</svg>
