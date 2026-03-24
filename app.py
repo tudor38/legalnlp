@@ -27,7 +27,8 @@ doc_stats         = st.Page("pages/document_statistics.py", title="Document Stat
 document_terms    = st.Page("pages/document_terms.py",      title="Document Terms",      icon=":material/label:")
 topic_exploration = st.Page("pages/topic_exploration.py",   title="Topic Exploration",   icon=":material/explore:")
 position_check    = st.Page("pages/position_check.py",      title="Find Basis",          icon=":material/fact_check:")
-issues_overview   = st.Page("pages/issues_overview.py",     title="Issues Overview",      icon=":material/gavel:")
+issues_overview   = st.Page("pages/issues_overview.py",     title="Issues Overview",     icon=":material/gavel:")
+search            = st.Page("pages/search.py",              title="Search",              icon=":material/search:")
 
-pg = st.navigation([doc_stats, document_terms, topic_exploration, position_check, issues_overview])
+pg = st.navigation([doc_stats, document_terms, topic_exploration, position_check, issues_overview, search])
 pg.run()

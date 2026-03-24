@@ -51,7 +51,7 @@ _LOW_TEMPLATES = [
 ]
 
 _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
-_RISK_COLOR = {"high": "#c0392b", "medium": "#d35400", "low": "#27ae60"}
+_RISK_COLOR = {"high": "#8b3535", "medium": "#7a5a20", "low": "#2e6b42"}
 _RISK_LABEL = {"high": "High", "medium": "Medium", "low": "Low"}
 
 # Tableau10 desaturated — same palette as document_statistics / src/stats/render.py
@@ -372,7 +372,7 @@ def _issue_card(issue: dict, color_map: dict[str, str]) -> str:
 
     is_open = issue["status"] == "open"
     status_label = "Open" if is_open else "Resolved"
-    status_color = "#888" if not is_open else "#c0392b"
+    status_color = "#888"
 
     name_h = html.escape(issue["issue_name"])
     rationale_h = html.escape(issue.get("risk_rationale", ""))
@@ -429,24 +429,23 @@ def _issue_card(issue: dict, color_map: dict[str, str]) -> str:
 
 def _summary_row(high_n: int, med_n: int, low_n: int, total_n: int) -> str:
     items = [
-        (str(total_n), "issues", "#444"),
-        (str(high_n),  "high",   _RISK_COLOR["high"]),
-        (str(med_n),   "medium", _RISK_COLOR["medium"]),
-        (str(low_n),   "low",    _RISK_COLOR["low"]),
+        (str(total_n), "issues",  "#262730"),
+        (str(high_n),  "high",    _RISK_COLOR["high"]),
+        (str(med_n),   "medium",  _RISK_COLOR["medium"]),
+        (str(low_n),   "low",     _RISK_COLOR["low"]),
     ]
     cells = "".join(
         f'<div style="flex:1;text-align:center;padding:12px 0;border-right:1px solid #f0f0f0">'
-        f'<div style="font-size:1.7em;font-weight:700;color:{c};line-height:1">{v}</div>'
-        f'<div style="font-size:0.72em;color:#999;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">{l}</div>'
+        f'<div style="font-size:1.7em;font-weight:700;color:#262730;line-height:1">{v}</div>'
+        f'<div style="font-size:0.72em;color:{c};margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">{l}</div>'
         f'</div>'
         for v, l, c in items
     )
-    # remove last border
     cells = cells.rsplit('border-right:1px solid #f0f0f0', 1)
     cells = 'border-right:none'.join(cells)
     return (
         f'<div style="display:flex;border:1px solid #e8eaed;border-radius:6px;'
-        f'background:#fff;margin-bottom:6px">{cells}</div>'
+        f'background:#fff;margin-bottom:16px">{cells}</div>'
     )
 
 
@@ -500,15 +499,7 @@ if not working:
 
 open_count = sum(1 for c in top_level if not c.resolved)
 resolved_count = len(top_level) - open_count
-st.markdown(
-    f'<p style="font-size:0.83em;color:#888;margin-bottom:1.2em">'
-    f'{len(top_level)} comment threads&ensp;·&ensp;'
-    f'<span style="color:#d32f2f;font-weight:600">{open_count} open</span>&ensp;·&ensp;'
-    f'<span style="color:#2e7d32">{resolved_count} resolved</span>&ensp;·&ensp;'
-    f'analyzing {len(working)}'
-    f'</p>',
-    unsafe_allow_html=True,
-)
+st.caption(f"{len(top_level)} comment threads · {open_count} open · {resolved_count} resolved · analysing {len(working)}")
 
 if st.button("Generate Report", type="primary"):
     st.session_state.pop("p5_issues", None)
