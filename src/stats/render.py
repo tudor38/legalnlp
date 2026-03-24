@@ -369,7 +369,7 @@ def render_timeline(
     # Table controls
     col_view, col_expand = st.columns([1, 1])
     expanded_view = col_view.toggle(
-        "Expanded view",
+        "Show expanded view",
         key=expanded_view_key,
         on_change=on_expanded_view,
     )

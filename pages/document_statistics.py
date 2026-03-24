@@ -420,12 +420,15 @@ if file_bytes:
     all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
 
     filtered_c_df = filter_by_date(c_df, date_range[0], date_range[1])
-    if not filtered_c_df.empty and selected_authors:
-        filtered_c_df = filtered_c_df[
-            filtered_c_df["author"].isin(selected_authors)
-        ].reset_index(drop=True)
     filtered_r_df = filter_by_date(r_df, date_range[0], date_range[1])
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
+    if selected_authors:
+        if not filtered_c_df.empty:
+            filtered_c_df = filtered_c_df[filtered_c_df["author"].isin(selected_authors)].reset_index(drop=True)
+        if not filtered_r_df.empty:
+            filtered_r_df = filtered_r_df[filtered_r_df["author"].isin(selected_authors)].reset_index(drop=True)
+        if not filtered_m_df.empty:
+            filtered_m_df = filtered_m_df[filtered_m_df["author"].isin(selected_authors)].reset_index(drop=True)
 
     _seed("p1_main_tab")
     main_tab = st.pills(

@@ -1,9 +1,10 @@
 import streamlit as st
 
-page_1 = st.Page("pages/page_1.py", title="Page 1", icon=":material/add_circle:")
-page_2 = st.Page("pages/page_2.py", title="Page 2", icon=":material/add_circle:")
+doc_stats = st.Page("pages/document_statistics.py", title="Document Statistics", icon=":material/description:")
+topic_exploration = st.Page("pages/topic_exploration.py", title="Topic Exploration", icon=":material/explore:")
+position_check = st.Page("pages/position_check.py", title="Position Check", icon=":material/gavel:")
 
-pg = st.navigation([page_1, page_2])
+pg = st.navigation([doc_stats, topic_exploration, position_check])
 
-st.set_page_config(page_title="Data manager", page_icon=":material/edit:")
+st.set_page_config(page_title="Legal NLP", page_icon=":material/gavel:")
 pg.run()
