@@ -613,6 +613,15 @@ wheels = [
 ]
 
 [[package]]
+name = "en-core-web-sm"
+version = "3.8.0"
+source = { registry = "https://github.com/explosion/spacy-models/releases/expanded_assets/en_core_web_sm-3.8.0" }
+sdist = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz" }
+wheels = [
+    { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.25.2"
 source = { registry = "https://pypi.org/simple" }
@@ -993,6 +1002,7 @@ dependencies = [
     { name = "altair" },
     { name = "bertopic" },
     { name = "datamapplot" },
+    { name = "en-core-web-sm" },
     { name = "plotly", extra = ["express"] },
     { name = "pystemmer" },
     { name = "sentence-transformers" },
@@ -1007,6 +1017,7 @@ requires-dist = [
     { name = "altair", specifier = ">=6.0.0" },
     { name = "bertopic", specifier = ">=0.17.3" },
     { name = "datamapplot", specifier = ">=0.6.2" },
+    { name = "en-core-web-sm", specifier = ">=3.8.0" },
     { name = "plotly", extras = ["express"], specifier = ">=6.6.0" },
     { name = "pystemmer", specifier = ">=3.0.0" },
     { name = "sentence-transformers", specifier = ">=5.1.1" },
