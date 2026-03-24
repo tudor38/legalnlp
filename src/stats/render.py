@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import NamedTuple
 
 from src.comments.extract import Comment
-from src.stats.compute import CommentMetrics
+from src.stats.compute import CommentMetrics, PassageActivity
 from src.stats.config import CFG
 import streamlit as st
 import pandas as pd
@@ -177,6 +177,82 @@ def render_author_bar(
         )
     )
     st.altair_chart(chart, width="stretch")
+
+
+# ---------------------------------------------------------------------------
+# Problematic passages
+# ---------------------------------------------------------------------------
+def render_problematic_passages(passages: list[PassageActivity]) -> None:
+    """
+    Render a bar chart and ranked table of the most contested passages.
+    Chart shows total activity per passage. Table shows full paragraph text
+    with comment, redline, and move counts.
+    """
+    if not passages:
+        st.caption("No activity found.")
+        return
+
+    df = pd.DataFrame(
+        [
+            {
+                "rank": i + 1,
+                "para_idx": p.para_idx,
+                "paragraph": p.paragraph,
+                "comments": p.comment_count,
+                "redlines": p.redline_count,
+                "moves": p.move_count,
+                "total": p.total_activity,
+                "authors": ", ".join(sorted(p.authors)),
+            }
+            for i, p in enumerate(passages)
+        ]
+    )
+
+    # --- Bar chart ---
+    chart_df = df.copy()
+    chart_df["label"] = (
+        "#" + chart_df["rank"].astype(str) + "  " + chart_df["paragraph"].str[:60] + "…"
+    )
+
+    chart = (
+        alt.Chart(chart_df)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "total:Q",
+                title="Total Activity",
+                axis=alt.Axis(tickMinStep=1, format="d"),
+            ),
+            y=alt.Y("label:N", sort="-x", title=None),
+            color=alt.value(_AUTHOR_PALETTE[0]),
+            tooltip=[
+                alt.Tooltip("rank:Q", title="Rank"),
+                alt.Tooltip("total:Q", title="Total Activity"),
+                alt.Tooltip("comments:Q", title="Comments"),
+                alt.Tooltip("redlines:Q", title="Redlines"),
+                alt.Tooltip("moves:Q", title="Moves"),
+                alt.Tooltip("authors:N", title="Authors"),
+            ],
+        )
+        .properties(
+            title="Most Contested Passages",
+            height=_BAR_HEIGHT_PER_ROW * len(df) + _BAR_HEIGHT_BASE,
+        )
+    )
+    st.altair_chart(chart, width="stretch")
+
+    # --- Ranked table ---
+    st.markdown("#### Passage Detail")
+    for _, row in df.iterrows():
+        with st.expander(
+            f"#{int(row['rank'])}  ·  {int(row['total'])} activity  ·  "
+            f"{int(row['comments'])} comments  ·  {int(row['redlines'])} redlines  ·  "
+            f"{int(row['moves'])} moves",
+            expanded=False,
+        ):
+            st.markdown(f"**Authors:** {row['authors']}")
+            st.markdown("**Paragraph:**")
+            st.markdown(f"> {row['paragraph']}")
 
 
 # ---------------------------------------------------------------------------
