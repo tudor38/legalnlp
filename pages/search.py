@@ -3,6 +3,7 @@ Search — query across multiple uploaded Word documents.
 
 Supports three search methods:
   Keyword  — exact substring match (case-insensitive)
+  Regex    — regular expression match
   Relevance — BM25 ranking across all documents
   Semantic  — cosine similarity via sentence-transformers embeddings
 """
@@ -12,23 +13,43 @@ import re
 
 import numpy as np
 import streamlit as st
+import Stemmer as _PyStemmer
+from spacy.lang.en.stop_words import STOP_WORDS
 
+from src.app_state import MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
-from src.utils.text import bm25_scores
+from src.utils.text import TOPIC_PALETTE, bm25_scores, tokenize
 
 
-def _keyword_highlight(text: str, query: str) -> str:
-    if not query:
+_stemmer = _PyStemmer.Stemmer("english")
+
+
+def _highlight_term(text: str, query: str, color: str = "") -> str:
+    if not query.strip():
         return text
-    return re.sub(
-        f"({re.escape(query)})", r"<mark>\1</mark>", text, flags=re.IGNORECASE
+    style = f' style="background:{color}"' if color else ""
+    return re.compile(re.escape(query), flags=re.IGNORECASE).sub(
+        lambda m: f"<mark{style}>{m.group(0)}</mark>", text
     )
 
 
-def _regex_highlight(text: str, pattern: re.Pattern) -> str:
-    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
+def _highlight_query_tokens(text: str, query: str, color: str = "") -> str:
+    stemmed_terms = {
+        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
+    }
+    if not stemmed_terms:
+        return text
+    style = f' style="background:{color}"' if color else ""
+
+    def _replace(m: re.Match) -> str:
+        word = m.group(0)
+        if _stemmer.stemWord(word.lower()) in stemmed_terms:
+            return f"<mark{style}>{word}</mark>"
+        return word
+
+    return re.sub(r"\b\w+\b", _replace, text)
 
 
 # ---------------------------------------------------------------------------
@@ -60,35 +81,43 @@ uploaded = st.file_uploader(
     label_visibility="collapsed",
 )
 
-if not uploaded:
+# Persist uploaded files across navigations
+if uploaded:
+    st.session_state["_search_stored_files"] = [
+        (f.name, f.getvalue()) for f in uploaded
+    ]
+
+stored_files: list[tuple[str, bytes]] = st.session_state.get("_search_stored_files", [])
+
+if not stored_files:
     st.caption("Upload one or more Word documents to search across them.")
     st.stop()
 
+files_to_use = [(f.name, f.getvalue()) for f in uploaded] if uploaded else stored_files
+
+if not uploaded and stored_files:
+    names = ", ".join(n for n, _ in stored_files)
+    col_info, col_clear = st.columns([6, 1])
+    col_info.caption(f"Using: {names}")
+    if col_clear.button("Clear", key="search_clear_files"):
+        del st.session_state["_search_stored_files"]
+        st.rerun()
+
 # Sidebar
-st.sidebar.markdown("### Search")
-method = st.sidebar.radio(
-    "Method",
-    ["Keyword", "Regex", "Relevance", "Semantic"],
-    index=2,
-)
-if method == "Semantic":
-    model_name = st.sidebar.selectbox(
-        "Embedding model",
-        ["all-MiniLM-L6-v2", "all-mpnet-base-v2"],
-        index=0,
-    )
-max_results = st.sidebar.slider("Max results", 5, 50, 20)
+_saved_max = st.session_state.get("_search_pref_max_results", 20)
+max_results = st.sidebar.slider("Max results", 5, 50, _saved_max)
+st.session_state["_search_pref_max_results"] = max_results
 
 # Build corpus: list of (doc_name, para_text)
 corpus: list[tuple[str, str]] = []
-for f in uploaded:
+for name, file_bytes in files_to_use:
     try:
-        paras = _extract(f.getvalue())
+        paras = _extract(file_bytes)
     except DocxParseError:
-        st.warning(f"'{f.name}' is not a valid Word document and was skipped.")
+        st.warning(f"'{name}' is not a valid Word document and was skipped.")
         continue
     for p in paras:
-        corpus.append((f.name, p))
+        corpus.append((name, p))
 
 doc_names = [name for name, _ in corpus]
 texts = [text for _, text in corpus]
@@ -99,11 +128,51 @@ st.caption(
 )
 
 # Search input
+_saved_query = st.session_state.get("_search_pref_query", "")
 query = st.text_input(
     "Query",
+    value=_saved_query,
     placeholder="Search across all documents…",
     label_visibility="collapsed",
+    key="search_query",
 )
+st.session_state["_search_pref_query"] = query
+
+_method_options = ["Keyword", "Regex", "Relevance", "Semantic"]
+st.session_state.setdefault("_search_pref_method", "Keyword")
+st.session_state.setdefault("search_method", st.session_state["_search_pref_method"])
+method = st.pills(
+    "Search type",
+    options=_method_options,
+    key="search_method",
+    label_visibility="collapsed",
+    selection_mode="single",
+) or "Keyword"
+st.session_state["_search_pref_method"] = method
+
+min_score: float = 0.0
+if method in ("Relevance", "Semantic"):
+    _saved_min_score = st.session_state.get("_search_pref_min_score", 0.0)
+    min_score = st.sidebar.slider(
+        "Minimum score",
+        min_value=0.0,
+        max_value=1.0,
+        value=_saved_min_score,
+        step=0.01,
+        key="search_min_score",
+    )
+    st.session_state["_search_pref_min_score"] = min_score
+
+_model_options = [MODEL_MINILM, MODEL_MPNET]
+if method == "Semantic":
+    _saved_model = st.session_state.get("_search_pref_model")
+    model_name = st.sidebar.selectbox(
+        "Embedding model",
+        _model_options,
+        index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
+        key="search_model",
+    )
+    st.session_state["_search_pref_model"] = model_name
 
 if not query or not query.strip():
     st.stop()
@@ -118,7 +187,6 @@ if method == "Keyword":
 elif method == "Regex":
     try:
         pattern = re.compile(q, re.IGNORECASE)
-        regex_error = None
     except re.error as e:
         st.warning(f"Invalid regex: {e}")
         st.stop()
@@ -127,18 +195,16 @@ elif method == "Regex":
 elif method == "Relevance":
     scores = bm25_scores(texts, q)
     ranked = np.argsort(-scores)
-    hits = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0][:max_results]
+    hits = [(int(i), float(scores[i])) for i in ranked if scores[i] >= min_score and scores[i] > 0][:max_results]
 
 else:  # Semantic
     with st.spinner("Embedding…"):
         corpus_embs = _embed(tuple(texts), model_name)
         encoder = get_sentence_transformer(model_name)
-        q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[
-            0
-        ]
+        q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
     sims = corpus_embs @ q_emb
     ranked = np.argsort(-sims)
-    hits = [(int(i), float(sims[i])) for i in ranked[:max_results]]
+    hits = [(int(i), float(sims[i])) for i in ranked if sims[i] >= min_score][:max_results]
 
 if not hits:
     st.info("No matches found.")
@@ -146,28 +212,36 @@ if not hits:
 
 st.caption(f"{len(hits)} result{'s' if len(hits) != 1 else ''}")
 
+# Assign a color to each unique document name
+unique_docs = list(dict.fromkeys(doc_names))
+doc_color = {name: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, name in enumerate(unique_docs)}
+
 # Results
 for idx, score in hits:
     doc_name = doc_names[idx]
     passage = texts[idx]
+    color = doc_color[doc_name]
 
     if method == "Keyword":
-        display = _keyword_highlight(passage, q)
+        display = _highlight_term(passage, q, color)
         score_str = ""
     elif method == "Regex":
-        display = _regex_highlight(passage, pattern)
+        display = pattern.sub(lambda m, c=color: f'<mark style="background:{c}">{m.group(0)}</mark>', passage)
         score_str = ""
     elif method == "Relevance":
-        display = _keyword_highlight(passage, q)
+        display = _highlight_query_tokens(passage, q, color)
         score_str = f"{score:.2f}"
-    else:
-        display = passage
+    else:  # Semantic
+        display = _highlight_query_tokens(passage, q, color)
         score_str = f"{score:.2f}"
 
     with st.container(border=True):
         col_doc, col_score = st.columns([5, 1])
         with col_doc:
-            st.caption(doc_name)
+            st.markdown(
+                f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{doc_name}</span>',
+                unsafe_allow_html=True,
+            )
         with col_score:
             if score_str:
                 st.caption(score_str)
