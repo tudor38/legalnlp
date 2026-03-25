@@ -1,3 +1,4 @@
+import hashlib
 import io
 import re
 
@@ -42,7 +43,7 @@ def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
                 if term.lower() in seen:
                     continue
                 seen.add(term.lower())
-                rows.append({"¶": idx, "Term": term, "Context": para})
+                rows.append({"Para": idx, "Term": term, "Context": para})
     return pd.DataFrame(rows)
 
 
@@ -59,7 +60,7 @@ def _extract_entities(
         for ent in doc.ents:
             if ent.label_ in labels:
                 rows.append(
-                    {"¶": idx, "Value": ent.text, "Type": ent.label_, "Context": para}
+                    {"Para": idx, "Value": ent.text, "Type": ent.label_, "Context": para}
                 )
     return pd.DataFrame(rows)
 
@@ -84,7 +85,7 @@ def _extract_money(paragraphs: tuple[str, ...]) -> pd.DataFrame:
             val = m.group(0).strip()
             if val not in seen:
                 seen.add(val)
-                rows.append({"¶": idx, "Value": val, "Context": para})
+                rows.append({"Para": idx, "Value": val, "Context": para})
     return pd.DataFrame(rows)
 
 
@@ -145,8 +146,14 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
             row["Context"],
             flags=re.IGNORECASE,
         )
-        lines.append(f"#### ¶{row['¶']} — {term}\n\n{context}")
+        lines.append(f"#### Para {row['Para']} — {term}\n\n{context}")
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False)
+def _get_paragraphs(file_bytes: bytes) -> tuple[str, ...]:
+    doc = extract_paragraphs(io.BytesIO(file_bytes))
+    return tuple(p.strip() for p in doc.paragraphs if p and p.strip())
 
 
 # ---------------------------------------------------------------------------
@@ -154,8 +161,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
 # ---------------------------------------------------------------------------
 file_bytes = require_document()
 
-doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
-paragraphs = tuple(p.strip() for p in doc_paragraphs.paragraphs if p and p.strip())
+paragraphs = _get_paragraphs(file_bytes)
 
 if not paragraphs:
     st.warning("No usable text found in the document.")
@@ -164,25 +170,61 @@ if not paragraphs:
 with st.sidebar:
     _all_models = ["en_core_web_sm", "en_core_web_md", "en_core_web_lg", "en_core_web_trf"]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
+    _saved = st.session_state.get("_dt_spacy_model_pref")
+    _index = _installed.index(_saved) if _saved in _installed else 0
     spacy_model = st.selectbox(
         "spaCy model",
         options=_installed,
-        index=0,
+        index=_index,
         help="Larger models improve entity recognition quality. md/lg are a good balance; trf is most accurate but slower.",
     )
+    st.session_state["_dt_spacy_model_pref"] = spacy_model
 
 st.subheader("Document Terms")
 st.markdown(
     "Extracts key terms from the document: defined terms, dates, parties and entities, monetary values, and numbers."
 )
 
+# Recompute only when the document or model changes
+_cache_key = hashlib.md5(file_bytes).hexdigest() + "|" + spacy_model
+
+if st.session_state.get("_doc_terms_key") != _cache_key:
+    try:
+        with st.spinner("Extracting document terms…"):
+            defs_df = _extract_definitions(paragraphs)
+            dates_df = _clean_dates(
+                _extract_entities(paragraphs, ("DATE",), spacy_model).drop(columns="Type", errors="ignore")
+            )
+            parties_df = _extract_entities(
+                paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"), spacy_model
+            )
+            money_df = _extract_money(paragraphs)
+            numbers_df = _clean_amounts(
+                _extract_entities(paragraphs, ("QUANTITY", "CARDINAL"), spacy_model).drop(columns="Type", errors="ignore")
+            )
+    except RuntimeError as e:
+        st.error(str(e))
+        st.stop()
+    st.session_state.update({
+        "_doc_terms_key": _cache_key,
+        "_doc_terms_defs": defs_df,
+        "_doc_terms_dates": dates_df,
+        "_doc_terms_parties": parties_df,
+        "_doc_terms_money": money_df,
+        "_doc_terms_numbers": numbers_df,
+    })
+else:
+    defs_df = st.session_state["_doc_terms_defs"]
+    dates_df = st.session_state["_doc_terms_dates"]
+    parties_df = st.session_state["_doc_terms_parties"]
+    money_df = st.session_state["_doc_terms_money"]
+    numbers_df = st.session_state["_doc_terms_numbers"]
+
 tab_defs, tab_dates, tab_parties, tab_money, tab_numbers = st.tabs(
     ["Definitions", "Dates", "Parties & Entities", "Money", "Numbers"]
 )
 
 with tab_defs:
-    with st.spinner("Extracting definitions…"):
-        defs_df = _extract_definitions(paragraphs)
     if defs_df.empty:
         st.info("No definitions found.")
     else:
@@ -192,7 +234,7 @@ with tab_defs:
             width="stretch",
             hide_index=True,
             column_config={
-                "¶": st.column_config.NumberColumn("¶", width="small"),
+                "Para": st.column_config.NumberColumn("Para", width="small"),
                 "Term": st.column_config.TextColumn("Term", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -201,16 +243,6 @@ with tab_defs:
             _render_expanded(defs_df, "Term")
 
 with tab_dates:
-    try:
-        with st.spinner("Extracting dates…"):
-            dates_df = _clean_dates(
-                _extract_entities(paragraphs, ("DATE",), spacy_model).drop(
-                    columns="Type", errors="ignore"
-                )
-            )
-    except RuntimeError as e:
-        st.error(str(e))
-        st.stop()
     if dates_df.empty:
         st.info("No dates found.")
     else:
@@ -226,7 +258,7 @@ with tab_dates:
             width="stretch",
             hide_index=True,
             column_config={
-                "¶": st.column_config.NumberColumn("¶", width="small"),
+                "Para": st.column_config.NumberColumn("Para", width="small"),
                 "Value": st.column_config.TextColumn("Date", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -235,14 +267,6 @@ with tab_dates:
             _render_expanded(display_df, "Value")
 
 with tab_parties:
-    try:
-        with st.spinner("Extracting parties and entities…"):
-            parties_df = _extract_entities(
-                paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"), spacy_model
-            )
-    except RuntimeError as e:
-        st.error(str(e))
-        st.stop()
     if parties_df.empty:
         st.info("No parties or entities found.")
     else:
@@ -281,7 +305,7 @@ with tab_parties:
                 width="stretch",
                 hide_index=True,
                 column_config={
-                    "¶": st.column_config.NumberColumn("¶", width="small"),
+                    "Para": st.column_config.NumberColumn("Para", width="small"),
                     "Value": st.column_config.TextColumn("Entity", width="medium"),
                     "Type": st.column_config.TextColumn("Type", width="small"),
                     "Context": st.column_config.TextColumn("Context", width="large"),
@@ -291,8 +315,6 @@ with tab_parties:
                 _render_expanded(display_df, "Value")
 
 with tab_money:
-    with st.spinner("Extracting monetary values…"):
-        money_df = _extract_money(paragraphs)
     if money_df.empty:
         st.info("No monetary values found.")
     else:
@@ -302,7 +324,7 @@ with tab_money:
             width="stretch",
             hide_index=True,
             column_config={
-                "¶": st.column_config.NumberColumn("¶", width="small"),
+                "Para": st.column_config.NumberColumn("Para", width="small"),
                 "Value": st.column_config.TextColumn("Amount", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -311,16 +333,6 @@ with tab_money:
             _render_expanded(money_df, "Value")
 
 with tab_numbers:
-    try:
-        with st.spinner("Extracting numbers…"):
-            numbers_df = _clean_amounts(
-                _extract_entities(paragraphs, ("QUANTITY", "CARDINAL"), spacy_model).drop(
-                    columns="Type", errors="ignore"
-                )
-            )
-    except RuntimeError as e:
-        st.error(str(e))
-        st.stop()
     if numbers_df.empty:
         st.info("No numbers found.")
     else:
@@ -330,7 +342,7 @@ with tab_numbers:
             width="stretch",
             hide_index=True,
             column_config={
-                "¶": st.column_config.NumberColumn("¶", width="small"),
+                "Para": st.column_config.NumberColumn("Para", width="small"),
                 "Value": st.column_config.TextColumn("Value", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
