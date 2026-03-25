@@ -1,9 +1,11 @@
+import base64
 import io
 import json
 import re
 from collections.abc import Sequence
 
 import datamapplot
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -99,10 +101,73 @@ def _reduce_to_2d(
     return reducer.fit_transform(embeddings)
 
 
+@st.cache_data(show_spinner=False)
+def _render_map(
+    plot_embeddings: np.ndarray,
+    plot_label_layers: tuple,      # tuple of np.ndarray so it's hashable
+    all_docs: tuple[str, ...],
+    matched_indices: tuple[int, ...],
+    zoom: float,
+) -> tuple[str, str]:
+    """Return (mode, content): mode is 'static' or 'interactive'."""
+    finest = plot_label_layers[-1]
+    n_unique = len({l for l in finest if l != "Noise"})
+
+    if n_unique <= 8:
+        fig, _ = datamapplot.create_plot(
+            plot_embeddings,
+            finest,
+            noise_label="Noise",
+            noise_color="#cccccc",
+            dynamic_label_size=False,
+            figsize=(14, 10),
+            label_wrap_width=20,
+            dpi=120,
+        )
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        return "static", base64.b64encode(buf.read()).decode()
+    else:
+        plot_docs = [all_docs[i] for i in matched_indices]
+        extra_data = json.dumps({"paragraph_idx": list(matched_indices)})
+        plot = datamapplot.create_interactive_plot(
+            plot_embeddings,
+            *plot_label_layers,
+            hover_text=np.array(plot_docs, dtype=object),
+            extra_point_data=pd.DataFrame({"paragraph_idx": list(matched_indices)}),
+            on_click="openDoc(hoverData.paragraph_idx[index]);",
+            enable_search=False,
+            noise_label="Noise",
+            noise_color="#cccccc",
+            sub_title="Click a point to open the passage in context. Zoom in to reveal finer topic labels.",
+            initial_zoom_fraction=zoom,
+        )
+        all_docs_json = json.dumps(list(all_docs))
+        inject_script = f"""<script>
+window.__ALL_DOCS__ = {all_docs_json};
+window.openDoc = function(paraIdx) {{
+  var allDocs = window.__ALL_DOCS__;
+  var rows = allDocs.map(function(text, i) {{
+    var safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var idAttr = i === paraIdx ? 'id="active"' : '';
+    var cls = i === paraIdx ? ' class="active"' : '';
+    return '<p ' + idAttr + cls + '>' + safe + '</p>';
+  }});
+  var css = '<style>body{{font-family:Georgia,serif;max-width:900px;margin:40px auto;padding:0 20px;line-height:1.8;color:#333}}p{{margin:1em 0;padding:4px 0}}.active{{background:#fffde7;border-left:4px solid #f9a825;padding:.5em 1em;border-radius:0 4px 4px 0}}</style>';
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'+css+'</head><body>'+rows.join('')+'</body></html>';
+  var blob = new Blob([html],{{type:'text/html'}});
+  window.open(URL.createObjectURL(blob)+'#active','_blank');
+}};
+</script>"""
+        return "interactive", str(plot).replace("</body>", inject_script + "</body>", 1)
+
+
 def _default_granularity(n_docs: int) -> tuple[int, int, int]:
-    coarse = max(8, n_docs // 12)
-    medium = max(5, n_docs // 20)
-    fine = max(3, n_docs // 35)
+    coarse = max(max(2, n_docs // 6), n_docs // 40)
+    medium = max(max(2, n_docs // 9), n_docs // 80)
+    fine = max(2, n_docs // 150)
     medium = min(medium, coarse)
     fine = min(fine, medium)
     return coarse, medium, fine
@@ -276,22 +341,22 @@ st.sidebar.caption(
 )
 coarse_size = st.sidebar.slider(
     "Broad topics",
-    2,
-    max(2, min(50, len(docs) // 4)),
+    1,
+    max(3, min(50, len(docs) // 4)),
     coarse_default,
     help="Start here for high-level topics. Increase to merge topics into larger groups.",
 )
 medium_size = st.sidebar.slider(
     "Mid-level topics",
-    2,
-    max(2, min(30, len(docs) // 6)),
+    1,
+    max(3, min(30, len(docs) // 6)),
     medium_default,
     help="Balances specificity and stability. Usually between broad and detailed topic values.",
 )
 fine_size = st.sidebar.slider(
     "Detailed topics",
-    2,
-    max(2, min(15, len(docs) // 10)),
+    1,
+    max(3, min(15, len(docs) // 10)),
     fine_default,
     help="Use lower values to surface niche sub-topics. Too low can produce noisy clusters.",
 )
@@ -389,51 +454,26 @@ else:
 
 if len(matched_indices) >= 10:
     plot_embeddings = reduced_embeddings[matched_indices]
-    plot_docs = [docs[idx] for idx in matched_indices]
-    plot_label_layers = [labels[matched_indices] for labels in label_layers]
+    plot_label_layers = tuple(labels[matched_indices] for labels in label_layers)
+    n_plot = len(matched_indices)
+    zoom = max(0.33, min(1.0, 15 / n_plot))
 
-    extra_data = pd.DataFrame({"paragraph_idx": matched_indices})
-
-    plot = datamapplot.create_interactive_plot(
-        plot_embeddings,
-        font_family="Arial",
-        *plot_label_layers,
-        hover_text=np.array(plot_docs, dtype=object),
-        extra_point_data=extra_data,
-        on_click="openDoc(hoverData.paragraph_idx[index]);",
-        enable_search=False,
-        sub_title="Click a point to open the passage in context. Zoom in to reveal finer topic labels.",
-        # width="100%",
-        # height=820,
-        initial_zoom_fraction=0.33,
-        cluster_boundary_polygons=True,
-        cluster_boundary_line_width=6,
-    )
-
-    all_docs_json = json.dumps(list(docs))
-    inject_script = f"""<script>
-window.__ALL_DOCS__ = {all_docs_json};
-window.openDoc = function(paraIdx) {{
-  var allDocs = window.__ALL_DOCS__;
-  var rows = allDocs.map(function(text, i) {{
-    var safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    var idAttr = i === paraIdx ? 'id="active"' : '';
-    var cls = i === paraIdx ? ' class="active"' : '';
-    return '<p ' + idAttr + cls + '>' + safe + '</p>';
-  }});
-  var css = '<style>body{{font-family:Georgia,serif;max-width:900px;margin:40px auto;padding:0 20px;line-height:1.8;color:#333}}p{{margin:1em 0;padding:4px 0}}.active{{background:#fffde7;border-left:4px solid #f9a825;padding:.5em 1em;border-radius:0 4px 4px 0}}</style>';
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'+css+'</head><body>'+rows.join('')+'</body></html>';
-  var blob = new Blob([html],{{type:'text/html'}});
-  window.open(URL.createObjectURL(blob)+'#active','_blank');
-}};
-</script>"""
-
-    plot_html = str(plot).replace("</body>", inject_script + "</body>", 1)
+    with st.spinner("Building map…"):
+        map_mode, map_content = _render_map(
+            plot_embeddings,
+            plot_label_layers,
+            docs,
+            tuple(matched_indices),
+            zoom,
+        )
 
     st.markdown("#### Map")
-    expanded = len(matched_indices) >= 100
+    expanded = n_plot >= 100
     with st.expander("Topic map", expanded=expanded):
-        components.html(plot_html, height=860, scrolling=False)
+        if map_mode == "static":
+            st.image(base64.b64decode(map_content))
+        else:
+            components.html(map_content, height=860, scrolling=False)
 elif matched_indices:
     st.info(
         "Too few matches to render a map (minimum 10). Results are shown in the table below."
@@ -445,105 +485,144 @@ max_rows = st.sidebar.slider(
     "Max rows", min_value=10, max_value=500, value=100, step=10, key="topic_max_rows"
 )
 
-results_df = pd.DataFrame(
-    {
-        "paragraph_idx": np.arange(len(docs)),
-        "text": docs,
-    }
-)
-topic_columns = ["Broad topics", "Mid-level topics", "Detailed topics"]
-for idx, size in enumerate(granularity_sizes):
-    topic_col_name = (
-        topic_columns[idx] if idx < len(topic_columns) else f"Topics {idx + 1}"
+
+@st.fragment
+def _results_section(
+    docs: tuple[str, ...],
+    label_layers: list[np.ndarray],
+    matched_indices: list[int],
+    score_map: dict[int, float],
+    search_query: str,
+    search_method: str,
+    max_rows: int,
+    granularity_sizes: list[int],
+) -> None:
+    topic_columns = ["Broad topics", "Mid-level topics", "Detailed topics"]
+    results_df = pd.DataFrame(
+        {
+            "paragraph_idx": np.arange(len(docs)),
+            "text": docs,
+        }
     )
-    results_df[topic_col_name] = label_layers[idx]
+    for idx, size in enumerate(granularity_sizes):
+        topic_col_name = (
+            topic_columns[idx] if idx < len(topic_columns) else f"Topics {idx + 1}"
+        )
+        results_df[topic_col_name] = label_layers[idx]
 
-results_df = (
-    results_df.iloc[matched_indices].reset_index(drop=True)
-    if matched_indices
-    else results_df.iloc[0:0]
-)
-if score_map:
-    results_df["score"] = results_df["paragraph_idx"].map(score_map)
-    results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
+    results_df = (
+        results_df.iloc[matched_indices].reset_index(drop=True)
+        if matched_indices
+        else results_df.iloc[0:0]
+    )
+    if score_map:
+        results_df["score"] = results_df["paragraph_idx"].map(score_map)
+        results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
 
-st.divider()
-st.markdown("#### Filter")
-available_topic_cols = [col for col in topic_columns if col in results_df.columns]
-if available_topic_cols and not results_df.empty:
-    fcol1, fcol2 = st.columns([1, 3])
-    filter_col = fcol1.selectbox(
-        "Granularity",
-        options=available_topic_cols,
-        index=len(available_topic_cols) - 1,
-        key="topic_filter_col",
+    st.divider()
+    st.markdown("#### Filter")
+    available_topic_cols = [col for col in topic_columns if col in results_df.columns]
+    if available_topic_cols and not results_df.empty:
+        fcol1, fcol2 = st.columns([1, 3])
+        filter_col = fcol1.selectbox(
+            "Granularity",
+            options=available_topic_cols,
+            index=len(available_topic_cols) - 1,
+            key="topic_filter_col",
+            label_visibility="collapsed",
+        )
+        topic_options = sorted(t for t in results_df[filter_col].unique() if t != "Noise")
+        selected_topics = fcol2.multiselect(
+            "Topics",
+            options=topic_options,
+            default=[],
+            key="topic_filter_values",
+            placeholder=f"Select {filter_col.lower()}…",
+            label_visibility="collapsed",
+        )
+        if selected_topics:
+            results_df = results_df[
+                results_df[filter_col].isin(selected_topics)
+            ].reset_index(drop=True)
+
+    st.markdown("#### Results")
+    sortable_cols = [c for c in ["score", *topic_columns, "paragraph_idx"] if c in results_df.columns]
+    has_score = bool(score_map)
+    if has_score != st.session_state.get("_topic_had_score"):
+        st.session_state["_topic_had_score"] = has_score
+        st.session_state["topic_sort_col"] = "score" if has_score else "paragraph_idx"
+        st.session_state["topic_sort_asc"] = False
+    scol1, scol2 = st.columns([3, 1])
+    sort_by = scol1.selectbox(
+        "Sort by",
+        options=sortable_cols,
+        index=0,
+        key="topic_sort_col",
         label_visibility="collapsed",
     )
-    topic_options = sorted(t for t in results_df[filter_col].unique() if t != "Noise")
-    selected_topics = fcol2.multiselect(
-        "Topics",
-        options=topic_options,
-        default=[],
-        key="topic_filter_values",
-        placeholder=f"Select {filter_col.lower()}…",
-        label_visibility="collapsed",
+    sort_asc = scol2.toggle("Ascending", value=False, key="topic_sort_asc")
+    results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(drop=True)
+
+    st.caption(f"{len(results_df)} passages")
+    st.dataframe(
+        results_df.head(max_rows),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "paragraph_idx": st.column_config.NumberColumn("#", width="small"),
+            "text": st.column_config.TextColumn("Passage", width="large"),
+            "score": st.column_config.NumberColumn("Score", format="%.4f", width="small"),
+        },
     )
-    if selected_topics:
-        results_df = results_df[
-            results_df[filter_col].isin(selected_topics)
-        ].reset_index(drop=True)
 
-st.markdown("#### Results")
-st.caption(f"{len(results_df)} passages")
-st.dataframe(
-    results_df.head(max_rows),
-    width="stretch",
-    hide_index=True,
-    column_config={
-        "paragraph_idx": st.column_config.NumberColumn("#", width="small"),
-        "text": st.column_config.TextColumn("Passage", width="large"),
-        "score": st.column_config.NumberColumn("Score", format="%.4f", width="small"),
-    },
+    show_markdown = st.checkbox(
+        "Expand results",
+        key="topic_print_markdown",
+        value=False,
+    )
+
+    if show_markdown:
+        shown_df = results_df.head(max_rows).copy()
+        topic_cols = [col for col in topic_columns if col in shown_df.columns]
+        if shown_df.empty:
+            st.markdown("_No matching rows._")
+        else:
+            finest_labels = label_layers[-1]
+            color_map = _topic_color_map(finest_labels)
+            lines: list[str] = []
+            for _, row in shown_df.iterrows():
+                para_idx = int(row["paragraph_idx"])
+                text = str(row["text"])
+                if search_method in ("Relevance", "Semantic"):
+                    highlighted = _highlight_query_tokens(text, search_query)
+                elif search_method == "Regex":
+                    try:
+                        highlighted = re.compile(
+                            search_query.strip(), flags=re.IGNORECASE
+                        ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
+                    except re.error:
+                        highlighted = text
+                else:
+                    highlighted = _highlight_term(text, search_query)
+                topic_label = (
+                    finest_labels[para_idx] if para_idx < len(finest_labels) else ""
+                )
+                color = color_map.get(str(topic_label), "#ffe066")
+                highlighted = _highlight_topic_keywords(
+                    highlighted, str(topic_label), color
+                )
+                topics = " → ".join(f"{row[col]}" for col in topic_cols)
+                lines.append(f"#### ¶{para_idx} — {topics}\n\n{highlighted}")
+            st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
+
+
+_results_section(
+    docs=docs,
+    label_layers=label_layers,
+    matched_indices=matched_indices,
+    score_map=score_map,
+    search_query=search_query,
+    search_method=search_method,
+    max_rows=max_rows,
+    granularity_sizes=granularity_sizes,
 )
-
-show_markdown = st.checkbox(
-    "Expand results",
-    key="topic_print_markdown",
-    value=False,
-)
-
-if show_markdown:
-    shown_df = results_df.head(max_rows).copy()
-    topic_cols = [col for col in topic_columns if col in shown_df.columns]
-    if shown_df.empty:
-        st.markdown("_No matching rows._")
-    else:
-        finest_labels = label_layers[-1]
-        color_map = _topic_color_map(finest_labels)
-        lines: list[str] = []
-        for _, row in shown_df.iterrows():
-            para_idx = int(row["paragraph_idx"])
-            text = str(row["text"])
-            # Search query highlighting
-            if search_method in ("Relevance", "Semantic"):
-                highlighted = _highlight_query_tokens(text, search_query)
-            elif search_method == "Regex":
-                try:
-                    highlighted = re.compile(
-                        search_query.strip(), flags=re.IGNORECASE
-                    ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
-                except re.error:
-                    highlighted = text
-            else:
-                highlighted = _highlight_term(text, search_query)
-            # Topic keyword highlighting (on top of search highlighting)
-            topic_label = (
-                finest_labels[para_idx] if para_idx < len(finest_labels) else ""
-            )
-            color = color_map.get(str(topic_label), "#ffe066")
-            highlighted = _highlight_topic_keywords(
-                highlighted, str(topic_label), color
-            )
-            topics = " → ".join(f"{row[col]}" for col in topic_cols)
-            lines.append(f"#### ¶{para_idx} — {topics}\n\n{highlighted}")
-        st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)

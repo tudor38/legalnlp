@@ -48,7 +48,7 @@ min_confidence = st.sidebar.slider(
 )
 
 # Main
-st.subheader("Find Basis")
+st.subheader("Check Proposition")
 
 hypothesis = st.text_area(
     "State your claim",

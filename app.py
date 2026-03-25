@@ -33,7 +33,7 @@ def _diamond_icon() -> Image.Image:
     return img
 
 
-st.set_page_config(page_title="Legal NLP", page_icon=_diamond_icon())
+st.set_page_config(page_title="Legal NLP", page_icon=_diamond_icon(), layout="wide")
 st.logo("assets/logo.svg")
 
 doc_stats = st.Page(
@@ -44,19 +44,14 @@ doc_stats = st.Page(
 document_terms = st.Page(
     "pages/document_terms.py", title="Document Terms", icon=":material/label:"
 )
-topic_exploration = st.Page(
-    "pages/topic_exploration.py", title="Topic Exploration", icon=":material/explore:"
+topic_explorer = st.Page(
+    "pages/topic_explorer.py", title="Topic Explorer", icon=":material/explore:"
 )
 position_check = st.Page(
-    "pages/position_check.py", title="Find Basis", icon=":material/fact_check:"
+    "pages/position_check.py", title="Check Proposition", icon=":material/fact_check:"
 )
 issues_overview = st.Page(
     "pages/issues_overview.py", title="Issues Overview", icon=":material/gavel:"
-)
-relationship_graph = st.Page(
-    "pages/relationship_graph.py",
-    title="Relationship Graph",
-    icon=":material/account_tree:",
 )
 search = st.Page("pages/search.py", title="Search", icon=":material/search:")
 
@@ -64,10 +59,9 @@ pg = st.navigation(
     [
         doc_stats,
         document_terms,
-        topic_exploration,
+        topic_explorer,
         position_check,
         issues_overview,
-        relationship_graph,
         search,
     ]
 )

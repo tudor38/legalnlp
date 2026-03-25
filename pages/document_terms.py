@@ -2,6 +2,7 @@ import io
 import re
 
 import pandas as pd
+import spacy
 import streamlit as st
 
 from src.comments.extract import extract_paragraphs
@@ -22,10 +23,14 @@ def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
             r"\b(?P<term>[A-Z][A-Za-z\s]{1,60})\b\s+(?:is\s+)?(?:defined\s+as|referred\s+to\s+(?:herein\s+)?as)",
             re.IGNORECASE,
         ),
-        # (hereinafter "Term") or (the "Term")
+        # (hereinafter "Term"), (the "Term"), (together, the "Parties"), (each, a "Party"), etc.
         re.compile(
-            r'\((?:hereinafter\s+)?(?:the\s+)?["\u201c\u2018](?P<term>[^"\u201d\u2019]{1,80})["\u201d\u2019]\)',
+            r'\([^"\u201c\u2018]{0,50}["\u201c\u2018](?P<term>[^"\u201d\u2019]{1,80})["\u201d\u2019]\)',
             re.IGNORECASE,
+        ),
+        # (together, the Parties), (hereinafter, the Disclosing Party) — no quotes, Title Case term
+        re.compile(
+            r'\([^")]{0,60}(?:the|an?)\s+(?P<term>[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)\s*[,;.]?\s*\)',
         ),
     ]
     rows = []
@@ -45,8 +50,9 @@ def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
 def _extract_entities(
     paragraphs: tuple[str, ...],
     labels: tuple[str, ...],
+    model_name: str = "en_core_web_sm",
 ) -> pd.DataFrame:
-    nlp = get_spacy_nlp()
+    nlp = get_spacy_nlp(model_name)
     rows = []
     for idx, para in enumerate(paragraphs):
         doc = nlp(para)
@@ -55,6 +61,30 @@ def _extract_entities(
                 rows.append(
                     {"¶": idx, "Value": ent.text, "Type": ent.label_, "Context": para}
                 )
+    return pd.DataFrame(rows)
+
+
+_MONEY_RE = re.compile(
+    r"(?:"
+    r"(?:USD|EUR|GBP|CHF|CAD|AUD|JPY)\s+\d{1,3}(?:,\d{3})*(?:\.\d+)?"   # USD 8,500
+    r"|[\$€£]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?"                            # $8,500 / € 100,000
+    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:USD|EUR|GBP|CHF)"              # 8,500 USD
+    r"|\d+(?:\.\d+)?\s*(?:%|percent|per\s+cent)"                         # 18%, 1.5 %
+    r")",
+    re.IGNORECASE,
+)
+
+
+@st.cache_data(show_spinner=False)
+def _extract_money(paragraphs: tuple[str, ...]) -> pd.DataFrame:
+    rows = []
+    for idx, para in enumerate(paragraphs):
+        seen: set[str] = set()
+        for m in _MONEY_RE.finditer(para):
+            val = m.group(0).strip()
+            if val not in seen:
+                seen.add(val)
+                rows.append({"¶": idx, "Value": val, "Context": para})
     return pd.DataFrame(rows)
 
 
@@ -110,7 +140,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
     for _, row in df.iterrows():
         term = row[heading_col]
         context = re.sub(
-            r"\b" + re.escape(term) + r"\b",
+            r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])",
             lambda m: f"<mark>{m.group(0)}</mark>",
             row["Context"],
             flags=re.IGNORECASE,
@@ -131,13 +161,23 @@ if not paragraphs:
     st.warning("No usable text found in the document.")
     st.stop()
 
+with st.sidebar:
+    _all_models = ["en_core_web_sm", "en_core_web_md", "en_core_web_lg", "en_core_web_trf"]
+    _installed = [m for m in _all_models if spacy.util.is_package(m)]
+    spacy_model = st.selectbox(
+        "spaCy model",
+        options=_installed,
+        index=0,
+        help="Larger models improve entity recognition quality. md/lg are a good balance; trf is most accurate but slower.",
+    )
+
 st.subheader("Document Terms")
 st.markdown(
-    "Extracts key terms from the document: defined terms, dates, parties and entities, and numbers & amounts."
+    "Extracts key terms from the document: defined terms, dates, parties and entities, monetary values, and numbers."
 )
 
-tab_defs, tab_dates, tab_parties, tab_amounts = st.tabs(
-    ["Definitions", "Dates", "Parties & Entities", "Numbers & Amounts"]
+tab_defs, tab_dates, tab_parties, tab_money, tab_numbers = st.tabs(
+    ["Definitions", "Dates", "Parties & Entities", "Money", "Numbers"]
 )
 
 with tab_defs:
@@ -161,12 +201,16 @@ with tab_defs:
             _render_expanded(defs_df, "Term")
 
 with tab_dates:
-    with st.spinner("Extracting dates…"):
-        dates_df = _clean_dates(
-            _extract_entities(paragraphs, ("DATE",)).drop(
-                columns="Type", errors="ignore"
+    try:
+        with st.spinner("Extracting dates…"):
+            dates_df = _clean_dates(
+                _extract_entities(paragraphs, ("DATE",), spacy_model).drop(
+                    columns="Type", errors="ignore"
+                )
             )
-        )
+    except RuntimeError as e:
+        st.error(str(e))
+        st.stop()
     if dates_df.empty:
         st.info("No dates found.")
     else:
@@ -191,10 +235,14 @@ with tab_dates:
             _render_expanded(display_df, "Value")
 
 with tab_parties:
-    with st.spinner("Extracting parties and entities…"):
-        parties_df = _extract_entities(
-            paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT")
-        )
+    try:
+        with st.spinner("Extracting parties and entities…"):
+            parties_df = _extract_entities(
+                paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"), spacy_model
+            )
+    except RuntimeError as e:
+        st.error(str(e))
+        st.stop()
     if parties_df.empty:
         st.info("No parties or entities found.")
     else:
@@ -242,19 +290,15 @@ with tab_parties:
             if st.checkbox("Show expanded view", key="dt_parties_expanded"):
                 _render_expanded(display_df, "Value")
 
-with tab_amounts:
-    with st.spinner("Extracting amounts…"):
-        amounts_df = _clean_amounts(
-            _extract_entities(
-                paragraphs, ("MONEY", "PERCENT", "QUANTITY", "CARDINAL")
-            ).drop(columns="Type", errors="ignore")
-        )
-    if amounts_df.empty:
-        st.info("No monetary amounts found.")
+with tab_money:
+    with st.spinner("Extracting monetary values…"):
+        money_df = _extract_money(paragraphs)
+    if money_df.empty:
+        st.info("No monetary values found.")
     else:
-        st.caption(f"{len(amounts_df)} numbers & amounts")
+        st.caption(f"{len(money_df)} monetary values")
         st.dataframe(
-            amounts_df,
+            money_df,
             width="stretch",
             hide_index=True,
             column_config={
@@ -263,5 +307,33 @@ with tab_amounts:
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
         )
-        if st.checkbox("Show expanded view", key="dt_amounts_expanded"):
-            _render_expanded(amounts_df, "Value")
+        if st.checkbox("Show expanded view", key="dt_money_expanded"):
+            _render_expanded(money_df, "Value")
+
+with tab_numbers:
+    try:
+        with st.spinner("Extracting numbers…"):
+            numbers_df = _clean_amounts(
+                _extract_entities(paragraphs, ("QUANTITY", "CARDINAL"), spacy_model).drop(
+                    columns="Type", errors="ignore"
+                )
+            )
+    except RuntimeError as e:
+        st.error(str(e))
+        st.stop()
+    if numbers_df.empty:
+        st.info("No numbers found.")
+    else:
+        st.caption(f"{len(numbers_df)} numbers")
+        st.dataframe(
+            numbers_df,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "¶": st.column_config.NumberColumn("¶", width="small"),
+                "Value": st.column_config.TextColumn("Value", width="medium"),
+                "Context": st.column_config.TextColumn("Context", width="large"),
+            },
+        )
+        if st.checkbox("Show expanded view", key="dt_numbers_expanded"):
+            _render_expanded(numbers_df, "Value")

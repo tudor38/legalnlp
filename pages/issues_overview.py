@@ -460,13 +460,16 @@ nli_model_name = st.sidebar.selectbox(
 )
 open_only = st.sidebar.checkbox("Open issues only", value=True)
 
-max_issues = max(2, len(top_level))
-n_issues = st.sidebar.slider(
-    "Number of issues",
-    min_value=2,
-    max_value=min(20, max_issues),
-    value=min(6, max_issues // 2 + 1),
-)
+max_issues = len(top_level)
+if max_issues > 2:
+    n_issues = st.sidebar.slider(
+        "Number of issues",
+        min_value=1,
+        max_value=min(20, max_issues),
+        value=min(6, max_issues),
+    )
+else:
+    n_issues = max_issues
 
 # Filter
 working = [c for c in top_level if not c.resolved] if open_only else top_level

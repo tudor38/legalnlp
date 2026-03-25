@@ -145,7 +145,7 @@ def render_author_bar(
     all_authors: list[str] | None = None,
 ) -> None:
     if df.empty:
-        st.caption(f"No data for {title}.")
+        st.caption(f"No data for `{title}`.")
         return
 
     authors = all_authors if all_authors else sorted(df["author"].unique().tolist())

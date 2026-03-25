@@ -16,7 +16,6 @@ dependencies = [
     "umap-learn>=0.5.9.post2",
     "pystemmer>=3.0.0",
     "en-core-web-sm>=3.8.0",
-    "networkx>=3.0",
 ]
 
 [tool.pytest.ini_options]

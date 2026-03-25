@@ -62,15 +62,13 @@ KEY_REDLINE_TL_EXPANDED = "redline_tl_expanded"
 KEY_REDLINE_TL_EXPAND_ALL = "redline_tl_expand_all"
 KEY_REDLINE_TL_FIELDS = "redline_tl_fields"
 
-# Topic exploration page
+# Topic explorer page
 KEY_TOPIC_RANK_LIMIT = "topic_rank_limit"
 KEY_TOPIC_SEMANTIC_MIN = "topic_semantic_min"
 
 # Issues overview page
 KEY_ASSESSED_ISSUES = "assessed_issues"
 
-# Relationship graph page
-KEY_GRAPH_DATA = "graph_data"
 
 # ---------------------------------------------------------------------------
 # Cross-page typed accessors
