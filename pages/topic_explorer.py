@@ -1,7 +1,9 @@
 import base64
+import hashlib
 import io
 import json
 import re
+import time
 from collections.abc import Sequence
 
 import datamapplot
@@ -16,11 +18,11 @@ import Stemmer as _PyStemmer
 from spacy.lang.en.stop_words import STOP_WORDS
 from umap import UMAP
 
-from src.app_state import KEY_TOPIC_RANK_LIMIT, KEY_TOPIC_SEMANTIC_MIN
+from src.app_state import KEY_TOPIC_RANK_LIMIT, KEY_TOPIC_SEMANTIC_MIN, MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
-from src.utils.text import bm25_scores, tokenize
+from src.utils.text import TOPIC_PALETTE, bm25_scores, tokenize
 
 
 def _clean_docs(paragraphs: Sequence[str], min_chars: int) -> list[str]:
@@ -102,36 +104,50 @@ def _reduce_to_2d(
 
 
 @st.cache_data(show_spinner=False)
-def _render_map(
+def _render_static_map(
     plot_embeddings: np.ndarray,
-    plot_label_layers: tuple,      # tuple of np.ndarray so it's hashable
+    plot_label_layers: tuple,
+) -> str:
+    """Return base64-encoded PNG."""
+    finest = plot_label_layers[-1]
+    fig, _ = datamapplot.create_plot(
+        plot_embeddings,
+        finest,
+        noise_label="Noise",
+        noise_color="#cccccc",
+        dynamic_label_size=False,
+        figsize=(22, 15),
+        label_wrap_width=20,
+        dpi=180,
+    )
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode()
+
+
+@st.cache_data(show_spinner=False)
+def _render_interactive_map(
+    plot_embeddings: np.ndarray,
+    plot_label_layers: tuple,
     all_docs: tuple[str, ...],
     matched_indices: tuple[int, ...],
     zoom: float,
-) -> tuple[str, str]:
-    """Return (mode, content): mode is 'static' or 'interactive'."""
-    finest = plot_label_layers[-1]
-    n_unique = len({l for l in finest if l != "Noise"})
+) -> str | None:
+    """Return HTML string, or None if datamapplot cannot render this dataset interactively.
 
-    if n_unique <= 8:
-        fig, _ = datamapplot.create_plot(
-            plot_embeddings,
-            finest,
-            noise_label="Noise",
-            noise_color="#cccccc",
-            dynamic_label_size=False,
-            figsize=(14, 10),
-            label_wrap_width=20,
-            dpi=120,
-        )
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight")
-        plt.close(fig)
-        buf.seek(0)
-        return "static", base64.b64encode(buf.read()).decode()
-    else:
+    datamapplot crashes when only one unique topic label exists: it produces a
+    1-D label_locations array ([x, y]) instead of 2-D ([[x, y], ...]), causing
+    an IndexError on label_locations[:, 0].  Guard against it up front.
+    """
+    finest = plot_label_layers[-1]
+    n_unique = len({lbl for lbl in finest if lbl != "Noise"})
+    if n_unique < 2:
+        return None
+
+    try:
         plot_docs = [all_docs[i] for i in matched_indices]
-        extra_data = json.dumps({"paragraph_idx": list(matched_indices)})
         plot = datamapplot.create_interactive_plot(
             plot_embeddings,
             *plot_label_layers,
@@ -161,7 +177,9 @@ window.openDoc = function(paraIdx) {{
   window.open(URL.createObjectURL(blob)+'#active','_blank');
 }};
 </script>"""
-        return "interactive", str(plot).replace("</body>", inject_script + "</body>", 1)
+        return str(plot).replace("</body>", inject_script + "</body>", 1)
+    except (IndexError, ValueError):
+        return None
 
 
 def _default_granularity(n_docs: int) -> tuple[int, int, int]:
@@ -173,24 +191,10 @@ def _default_granularity(n_docs: int) -> tuple[int, int, int]:
     return coarse, medium, fine
 
 
-_TOPIC_PALETTE = [
-    "#ffe066",
-    "#b5ead7",
-    "#b5d5ff",
-    "#e8b5ff",
-    "#ffb5b5",
-    "#ffd9b5",
-    "#b5ffe4",
-    "#c9ffb5",
-    "#ffb5e8",
-    "#b5f0ff",
-]
-
-
 def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
     unique = [l for l in dict.fromkeys(label_layer) if l != "Noise"]
     return {
-        label: _TOPIC_PALETTE[i % len(_TOPIC_PALETTE)] for i, label in enumerate(unique)
+        label: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, label in enumerate(unique)
     }
 
 
@@ -245,34 +249,42 @@ file_bytes = require_document()
 
 doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
 
+_model_options = [MODEL_MPNET, MODEL_MINILM]
+
 st.sidebar.markdown("### Topic Extraction")
 analysis_unit = st.sidebar.segmented_control(
     "Analysis unit",
     options=["Paragraph", "Sentence"],
-    default="Paragraph",
+    default=st.session_state.get("_topic_pref_analysis_unit", "Paragraph"),
+    key="topic_analysis_unit",
     help=(
         "Paragraph is best for legal docs in most cases. It keeps context and yields "
         "cleaner, more stable topics. Sentence is useful for very fine-grained issue "
         "spotting but can be noisier."
     ),
 )
+st.session_state["_topic_pref_analysis_unit"] = analysis_unit
+
 min_chars = st.sidebar.slider(
     "Minimum text length",
     20,
     400,
-    80,
+    st.session_state.get("_topic_pref_min_chars", 80),
     5,
+    key="topic_min_chars",
     help="Short text can be noisy. Increase this to focus on richer text.",
 )
+st.session_state["_topic_pref_min_chars"] = min_chars
+
+_saved_model = st.session_state.get("_topic_pref_embedding_model")
 embedding_model_name = st.sidebar.selectbox(
     "Embedding model",
-    options=[
-        "all-mpnet-base-v2",
-        "all-MiniLM-L6-v2",
-    ],
-    index=0,
+    options=_model_options,
+    index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
+    key="topic_embedding_model",
     help="This model converts each paragraph into vectors before topic clustering.",
 )
+st.session_state["_topic_pref_embedding_model"] = embedding_model_name
 
 if analysis_unit == "Sentence":
     docs = _paragraphs_to_sentences(doc_paragraphs.paragraphs, min_chars=min_chars)
@@ -285,26 +297,30 @@ if len(docs) < 12:
     )
     st.stop()
 
-st.subheader("Topic Explorer")
-st.markdown("#### Search")
-search_query = st.text_input(
-    "Filter text",
-    label_visibility="collapsed",
-    key="topic_search_query",
-    placeholder="Search across all topics...",
-)
-search_method = (
+def _on_search_submit() -> None:
+    st.session_state["_topic_active_query"] = st.session_state.get("topic_search_query", "")
+    st.session_state["_topic_active_method"] = st.session_state.get("topic_search_method") or "Keyword"
+
+
+@st.fragment
+def _search_method_pills() -> None:
+    st.session_state.setdefault("topic_search_method", "Keyword")
     st.pills(
         "Search type",
         options=["Keyword", "Regex", "Relevance", "Semantic"],
-        default="Keyword",
         key="topic_search_method",
         label_visibility="collapsed",
         selection_mode="single",
     )
-    or "Keyword"
-)
-if search_method != "Keyword":
+
+
+active_query = st.session_state.get("_topic_active_query", "")
+active_method = st.session_state.get("_topic_active_method", "Keyword")
+
+rank_limit = st.session_state.get(KEY_TOPIC_RANK_LIMIT, 200)
+semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
+
+if active_method in ("Relevance", "Semantic"):
     st.sidebar.markdown("### Search")
     rank_limit = st.sidebar.slider(
         "Result limit",
@@ -314,24 +330,19 @@ if search_method != "Keyword":
         step=10,
         key="topic_rank_limit",
     )
-    if search_method == "Semantic":
-        semantic_min_score = st.sidebar.slider(
-            "Minimum score",
-            min_value=-1.0,
-            max_value=1.0,
-            value=0.20,
-            step=0.01,
-            key="topic_semantic_min",
-            help="Higher values return stricter matches.",
-        )
-    else:
-        semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
-else:
-    rank_limit = st.session_state.get(KEY_TOPIC_RANK_LIMIT, 200)
-    semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
 
+if active_method == "Semantic":
+    semantic_min_score = st.sidebar.slider(
+        "Minimum score",
+        min_value=-1.0,
+        max_value=1.0,
+        value=0.20,
+        step=0.01,
+        key="topic_semantic_min",
+        help="Higher values return stricter matches.",
+    )
 
-normalized_query = search_query.strip().lower()
+normalized_query = active_query.strip().lower()
 coarse_default, medium_default, fine_default = _default_granularity(len(docs))
 st.sidebar.markdown("### Topics (Broad to Detailed)")
 st.sidebar.caption(
@@ -343,23 +354,31 @@ coarse_size = st.sidebar.slider(
     "Broad topics",
     1,
     max(3, min(50, len(docs) // 4)),
-    coarse_default,
+    st.session_state.get("_topic_pref_coarse_size", coarse_default),
+    key="topic_coarse_size",
     help="Start here for high-level topics. Increase to merge topics into larger groups.",
 )
+st.session_state["_topic_pref_coarse_size"] = coarse_size
+
 medium_size = st.sidebar.slider(
     "Mid-level topics",
     1,
     max(3, min(30, len(docs) // 6)),
-    medium_default,
+    st.session_state.get("_topic_pref_medium_size", medium_default),
+    key="topic_medium_size",
     help="Balances specificity and stability. Usually between broad and detailed topic values.",
 )
+st.session_state["_topic_pref_medium_size"] = medium_size
+
 fine_size = st.sidebar.slider(
     "Detailed topics",
     1,
     max(3, min(15, len(docs) // 10)),
-    fine_default,
+    st.session_state.get("_topic_pref_fine_size", fine_default),
+    key="topic_fine_size",
     help="Use lower values to surface niche sub-topics. Too low can produce noisy clusters.",
 )
+st.session_state["_topic_pref_fine_size"] = fine_size
 
 granularity_sizes = sorted({coarse_size, medium_size, fine_size}, reverse=True)
 
@@ -386,25 +405,50 @@ if seed_words_raw and seed_words_raw.strip():
     if parsed:
         seed_topic_list = parsed
 
-with st.spinner("Embedding and modeling topics..."):
-    docs_tuple = tuple(docs)
-    embeddings = _embed_docs(docs_tuple, embedding_model_name)
-    reduced_embeddings = _reduce_to_2d(
-        embeddings=embeddings,
-        n_neighbors=min(30, max(5, len(docs) // 25)),
-        min_dist=0.05,
-    )
+_topic_state_key = "|".join([
+    hashlib.md5(file_bytes).hexdigest(),
+    str(analysis_unit),
+    str(min_chars),
+    embedding_model_name,
+    str(granularity_sizes),
+    (seed_words_raw or "").strip(),
+])
 
-    label_layers: list[np.ndarray] = []
-    topic_counts: list[int] = []
-    for min_topic_size in granularity_sizes:
-        topic_model, topics = _fit_topics(
-            docs_tuple, embeddings, min_topic_size, seed_topic_list
+if st.session_state.get("_topic_state_key") != _topic_state_key:
+    with st.spinner("Embedding and modeling topics..."):
+        docs_tuple = tuple(docs)
+        embeddings = _embed_docs(docs_tuple, embedding_model_name)
+        reduced_embeddings = _reduce_to_2d(
+            embeddings=embeddings,
+            n_neighbors=min(30, max(5, len(docs) // 25)),
+            min_dist=0.05,
         )
-        labels = _topic_labels(topic_model, topics)
-        label_layers.append(labels)
-        n_topics = len({t for t in topics if t != -1})
-        topic_counts.append(n_topics)
+
+        label_layers: list[np.ndarray] = []
+        topic_counts: list[int] = []
+        for min_topic_size in granularity_sizes:
+            topic_model, topics = _fit_topics(
+                docs_tuple, embeddings, min_topic_size, seed_topic_list
+            )
+            labels = _topic_labels(topic_model, topics)
+            label_layers.append(labels)
+            n_topics = len({t for t in topics if t != -1})
+            topic_counts.append(n_topics)
+
+    st.session_state.update({
+        "_topic_state_key": _topic_state_key,
+        "_topic_docs": docs,
+        "_topic_embeddings": embeddings,
+        "_topic_reduced": reduced_embeddings,
+        "_topic_label_layers": label_layers,
+        "_topic_counts": topic_counts,
+    })
+else:
+    docs = st.session_state["_topic_docs"]
+    embeddings = st.session_state["_topic_embeddings"]
+    reduced_embeddings = st.session_state["_topic_reduced"]
+    label_layers = st.session_state["_topic_label_layers"]
+    topic_counts = st.session_state["_topic_counts"]
 
 st.sidebar.markdown("### Topics")
 sidebar_stats_cols = st.sidebar.columns(len(granularity_sizes))
@@ -422,18 +466,18 @@ if has_noise:
 score_map: dict[int, float] = {}
 if not normalized_query:
     matched_indices = list(range(len(docs)))
-elif search_method == "Keyword":
+elif active_method == "Keyword":
     matched_indices = [
         idx for idx, text in enumerate(docs) if normalized_query in text.lower()
     ]
-elif search_method == "Regex":
+elif active_method == "Regex":
     try:
-        pattern = re.compile(search_query.strip(), flags=re.IGNORECASE)
+        pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
         matched_indices = [idx for idx, text in enumerate(docs) if pattern.search(text)]
     except re.error as e:
         st.warning(f"Invalid regex: {e}")
         matched_indices = []
-elif search_method == "Relevance":
+elif active_method == "Relevance":
     scores = bm25_scores(docs, normalized_query)
     ranked = np.argsort(-scores)
     matched_indices = [int(i) for i in ranked if scores[i] > 0][:rank_limit]
@@ -452,34 +496,79 @@ else:
     ][:rank_limit]
     score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
 
-if len(matched_indices) >= 10:
+def _show_map(
+    plot_embeddings: np.ndarray,
+    plot_label_layers: tuple,
+    docs: tuple[str, ...],
+    matched_indices: list[int],
+    n_plot: int,
+    zoom: float,
+    html_content: str | None,
+) -> None:
+    expanded = n_plot >= 100
+    with st.expander("Topic map", expanded=expanded):
+        if html_content is None:
+            st.caption("Interactive map is not available for this dataset.")
+            with st.spinner("Building static map…"):
+                png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
+            st.image(base64.b64decode(png_b64), width="stretch")
+            return
+
+        _map_options = ["Interactive", "Static"]
+        st.session_state.setdefault("_topic_map_type_pref", "Interactive")
+        _map_index = _map_options.index(st.session_state["_topic_map_type_pref"])
+        map_type = st.radio(
+            "Map type",
+            _map_options,
+            index=_map_index,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        st.session_state["_topic_map_type_pref"] = map_type
+
+        if map_type == "Static":
+            with st.spinner("Building static map…"):
+                png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
+            st.image(base64.b64decode(png_b64), width="stretch")
+            return
+
+        components.html(html_content, height=860, scrolling=False)
+
+
+st.subheader("Topic Explorer")
+
+if not matched_indices:
+    st.info("No text matches your search. Try a broader term.")
+elif len(matched_indices) < 10:
+    st.info("Too few matches to render a map (minimum 10). Results are shown in the table below.")
+else:
     plot_embeddings = reduced_embeddings[matched_indices]
     plot_label_layers = tuple(labels[matched_indices] for labels in label_layers)
     n_plot = len(matched_indices)
     zoom = max(0.33, min(1.0, 15 / n_plot))
 
-    with st.spinner("Building map…"):
-        map_mode, map_content = _render_map(
-            plot_embeddings,
-            plot_label_layers,
-            docs,
-            tuple(matched_indices),
-            zoom,
-        )
+    _map_sig = (tuple(matched_indices), tuple(granularity_sizes), embedding_model_name)
+    if st.session_state.get("_topic_map_sig") != _map_sig:
+        with st.spinner("Building map…"):
+            html_content = _render_interactive_map(
+                plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
+            )
+        st.session_state["_topic_map_sig"] = _map_sig
+        st.session_state["_topic_map_html"] = html_content
+    else:
+        html_content = st.session_state["_topic_map_html"]
 
-    st.markdown("#### Map")
-    expanded = n_plot >= 100
-    with st.expander("Topic map", expanded=expanded):
-        if map_mode == "static":
-            st.image(base64.b64decode(map_content))
-        else:
-            components.html(map_content, height=860, scrolling=False)
-elif matched_indices:
-    st.info(
-        "Too few matches to render a map (minimum 10). Results are shown in the table below."
-    )
-else:
-    st.info("No text matches your search. Try a broader term.")
+    _show_map(plot_embeddings, plot_label_layers, docs, matched_indices, n_plot, zoom, html_content)
+
+st.markdown("#### Search")
+st.text_input(
+    "Filter text",
+    label_visibility="collapsed",
+    key="topic_search_query",
+    placeholder="Search across all topics…",
+    on_change=_on_search_submit,
+)
+_search_method_pills()
 
 max_rows = st.sidebar.slider(
     "Max rows", min_value=10, max_value=500, value=100, step=10, key="topic_max_rows"
@@ -551,7 +640,7 @@ def _results_section(
     if has_score != st.session_state.get("_topic_had_score"):
         st.session_state["_topic_had_score"] = has_score
         st.session_state["topic_sort_col"] = "score" if has_score else "paragraph_idx"
-        st.session_state["topic_sort_asc"] = False
+        st.session_state["topic_sort_asc"] = not has_score
     scol1, scol2 = st.columns([3, 1])
     sort_by = scol1.selectbox(
         "Sort by",
@@ -569,7 +658,7 @@ def _results_section(
         width="stretch",
         hide_index=True,
         column_config={
-            "paragraph_idx": st.column_config.NumberColumn("#", width="small"),
+            "paragraph_idx": st.column_config.NumberColumn("Para", width="small"),
             "text": st.column_config.TextColumn("Passage", width="large"),
             "score": st.column_config.NumberColumn("Score", format="%.4f", width="small"),
         },
@@ -581,39 +670,38 @@ def _results_section(
         value=False,
     )
 
-    if show_markdown:
-        shown_df = results_df.head(max_rows).copy()
-        topic_cols = [col for col in topic_columns if col in shown_df.columns]
-        if shown_df.empty:
-            st.markdown("_No matching rows._")
+    if not show_markdown:
+        return
+
+    shown_df = results_df.head(max_rows).copy()
+    if shown_df.empty:
+        st.markdown("_No matching rows._")
+        return
+
+    topic_cols = [col for col in topic_columns if col in shown_df.columns]
+    finest_labels = label_layers[-1]
+    color_map = _topic_color_map(finest_labels)
+    lines: list[str] = []
+    for _, row in shown_df.iterrows():
+        para_idx = int(row["paragraph_idx"])
+        text = str(row["text"])
+        if search_method in ("Relevance", "Semantic"):
+            highlighted = _highlight_query_tokens(text, search_query)
+        elif search_method == "Regex":
+            try:
+                highlighted = re.compile(
+                    search_query.strip(), flags=re.IGNORECASE
+                ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
+            except re.error:
+                highlighted = text
         else:
-            finest_labels = label_layers[-1]
-            color_map = _topic_color_map(finest_labels)
-            lines: list[str] = []
-            for _, row in shown_df.iterrows():
-                para_idx = int(row["paragraph_idx"])
-                text = str(row["text"])
-                if search_method in ("Relevance", "Semantic"):
-                    highlighted = _highlight_query_tokens(text, search_query)
-                elif search_method == "Regex":
-                    try:
-                        highlighted = re.compile(
-                            search_query.strip(), flags=re.IGNORECASE
-                        ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
-                    except re.error:
-                        highlighted = text
-                else:
-                    highlighted = _highlight_term(text, search_query)
-                topic_label = (
-                    finest_labels[para_idx] if para_idx < len(finest_labels) else ""
-                )
-                color = color_map.get(str(topic_label), "#ffe066")
-                highlighted = _highlight_topic_keywords(
-                    highlighted, str(topic_label), color
-                )
-                topics = " → ".join(f"{row[col]}" for col in topic_cols)
-                lines.append(f"#### ¶{para_idx} — {topics}\n\n{highlighted}")
-            st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
+            highlighted = _highlight_term(text, search_query)
+        topic_label = finest_labels[para_idx] if para_idx < len(finest_labels) else ""
+        color = color_map.get(str(topic_label), "#ffe066")
+        highlighted = _highlight_topic_keywords(highlighted, str(topic_label), color)
+        topics = " → ".join(f"{row[col]}" for col in topic_cols)
+        lines.append(f"#### Para {para_idx} — {topics}\n\n{highlighted}")
+    st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
 
 
 _results_section(
@@ -621,8 +709,8 @@ _results_section(
     label_layers=label_layers,
     matched_indices=matched_indices,
     score_map=score_map,
-    search_query=search_query,
-    search_method=search_method,
+    search_query=active_query,
+    search_method=active_method,
     max_rows=max_rows,
     granularity_sizes=granularity_sizes,
 )
