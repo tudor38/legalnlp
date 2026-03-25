@@ -11,7 +11,7 @@ import plotly.express as px
 from src.comments.render import render_paragraph_with_highlight
 
 # Tableau10 desaturated — consistent across Altair and Plotly
-_AUTHOR_PALETTE = [
+AUTHOR_PALETTE = [
     "#7fa7c9",
     "#f5b97a",
     "#e88b8c",
@@ -24,23 +24,23 @@ _AUTHOR_PALETTE = [
     "#d0ccc8",
 ]
 
-_DATE_FMT = CFG["display"]["date_format"]
-_CARD_HEIGHT = CFG["chart"]["card_height"]
-_MARKER_SIZE = CFG["chart"]["marker_size"]
-_MARKER_OPACITY = CFG["chart"]["marker_opacity"]
-_BAR_HEIGHT_PER_ROW = CFG["chart"]["bar_height_per_row"]
-_BAR_HEIGHT_BASE = CFG["chart"]["bar_height_base"]
-_TL_HEIGHT_PER_AUTHOR = CFG["chart"]["timeline_height_per_author"]
-_TL_HEIGHT_BASE = CFG["chart"]["timeline_height_base"]
+_DATE_FMT = CFG.display.date_format
+_CARD_HEIGHT = CFG.chart.card_height
+_MARKER_SIZE = CFG.chart.marker_size
+_MARKER_OPACITY = CFG.chart.marker_opacity
+_BAR_HEIGHT_PER_ROW = CFG.chart.bar_height_per_row
+_BAR_HEIGHT_BASE = CFG.chart.bar_height_base
+_TL_HEIGHT_PER_AUTHOR = CFG.chart.timeline_height_per_author
+_TL_HEIGHT_BASE = CFG.chart.timeline_height_base
 
 
 def _author_color_scale_from(authors: list[str]) -> alt.Scale:
-    colors = [_AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i in range(len(authors))]
+    colors = [AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)] for i in range(len(authors))]
     return alt.Scale(domain=authors, range=colors)
 
 
 def _author_color_map(authors: list[str]) -> dict[str, str]:
-    return {a: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)] for i, a in enumerate(authors)}
+    return {a: AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)] for i, a in enumerate(authors)}
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ def render_problematic_passages(passages: list[PassageActivity]) -> None:
                 axis=alt.Axis(tickMinStep=1, format="d"),
             ),
             y=alt.Y("label:N", sort="-x", title=None),
-            color=alt.value(_AUTHOR_PALETTE[0]),
+            color=alt.value(AUTHOR_PALETTE[0]),
             tooltip=[
                 alt.Tooltip("rank:Q", title="Rank"),
                 alt.Tooltip("total:Q", title="Total Activity"),

@@ -35,51 +35,24 @@ import io
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
-from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
-import spacy
 
-nlp = spacy.blank("en")
-nlp.add_pipe("sentencizer")
-
-
-# ---------------------------------------------------------------------------
-# Namespaces
-# ---------------------------------------------------------------------------
-W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
-W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
-
-
-def _tag(ns: str, local: str) -> str:
-    return f"{{{ns}}}{local}"
-
-
-# ---------------------------------------------------------------------------
-# Shared span types  (mirrors extract_redlines.py)
-# ---------------------------------------------------------------------------
-@dataclass
-class Span:
-    """A [start, end) character range, paragraph-relative."""
-
-    start: int
-    end: int
-
-    def __len__(self) -> int:
-        return self.end - self.start
-
-    def overlaps(self, other: "Span") -> bool:
-        return self.start < other.end and self.end > other.start
-
-
-@dataclass
-class SentenceSpan:
-    """A sentence and its paragraph-relative character span."""
-
-    text: str
-    span: Span
+from src.shared import (
+    W,
+    W14,
+    W15,
+    _tag,
+    Span,
+    SentenceSpan,
+    WordVersion,
+    detect_version,
+    DocxParseError,
+    _find_sentences_containing,
+    _build_parent_map,
+    _in_move_from,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +80,6 @@ class DocumentParagraphs:
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
-class WordVersion(Enum):
-    LEGACY = auto()  # comments.xml only
-    EXTENDED = auto()  # + commentsExtended.xml
-    MODERN = auto()  # + commentsIds.xml
 
 
 @dataclass
@@ -156,46 +125,6 @@ class Comment:
             if self.context
             else [],
         }
-
-
-# ---------------------------------------------------------------------------
-# Parent map helpers — used to detect moveFrom ancestry
-# ---------------------------------------------------------------------------
-def _build_parent_map(root: ET.Element) -> dict[ET.Element, ET.Element]:
-    return {child: parent for parent in root.iter() for child in parent}
-
-
-def _in_move_from(elem: ET.Element, parent_map: dict[ET.Element, ET.Element]) -> bool:
-    """Return True if elem is a descendant of a <w:moveFrom> element."""
-    current = elem
-    while current in parent_map:
-        current = parent_map[current]
-        if current.tag == _tag(W, "moveFrom"):
-            return True
-        # Short-circuit: moveTo is not moveFrom
-        if current.tag == _tag(W, "moveTo"):
-            return False
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Version detection
-# ---------------------------------------------------------------------------
-def detect_version(zip_names: list[str]) -> WordVersion:
-    """
-    Infer the Word format generation from which XML files are present.
-
-    commentsIds.xml was introduced in Word 2016 alongside the modern
-    threaded-comments UI; commentsExtended.xml appeared in Word 2013.
-    """
-    has_extended = "word/commentsExtended.xml" in zip_names
-    has_ids = "word/commentsIds.xml" in zip_names
-
-    if has_extended and has_ids:
-        return WordVersion.MODERN
-    if has_extended:
-        return WordVersion.EXTENDED
-    return WordVersion.LEGACY
 
 
 def _is_libreoffice(zip_names: list[str], names_bytes: dict[str, bytes]) -> bool:
@@ -319,22 +248,6 @@ def _apply_extended(
 # ---------------------------------------------------------------------------
 # Document context — selected text, paragraph, and sentences
 # ---------------------------------------------------------------------------
-def _find_sentences_containing(
-    text: str, sel_start: int, sel_end: int
-) -> list[SentenceSpan]:
-    if not text or sel_start >= sel_end:
-        return []
-    doc = nlp(text)
-    return [
-        SentenceSpan(
-            text=sent.text.strip(),
-            span=Span(sent.start_char, sent.end_char),
-        )
-        for sent in doc.sents
-        if sent.start_char < sel_end and sent.end_char > sel_start
-    ]
-
-
 def _parse_document_context(xml_bytes: bytes) -> dict[str, CommentContext]:
     """
     Parse word/document.xml and extract a CommentContext for each comment id.
@@ -461,23 +374,26 @@ def extract_comments(
     Returns a list of top-level Comment objects (replies nested inside
     Comment.replies) and the detected WordVersion.
     """
-    with zipfile.ZipFile(docx) as z:
-        names = z.namelist()
-        version = detect_version(names)
-        comments_bytes = (
-            z.read("word/comments.xml") if "word/comments.xml" in names else b""
-        )
-        extended_bytes = (
-            z.read("word/commentsExtended.xml")
-            if "word/commentsExtended.xml" in names
-            else b""
-        )
-        ids_bytes = (
-            z.read("word/commentsIds.xml") if "word/commentsIds.xml" in names else b""
-        )
-        document_bytes = (
-            z.read("word/document.xml") if "word/document.xml" in names else b""
-        )
+    try:
+        with zipfile.ZipFile(docx) as zf:
+            names = zf.namelist()
+            version = detect_version(names)
+            comments_bytes = (
+                zf.read("word/comments.xml") if "word/comments.xml" in names else b""
+            )
+            extended_bytes = (
+                zf.read("word/commentsExtended.xml")
+                if "word/commentsExtended.xml" in names
+                else b""
+            )
+            ids_bytes = (
+                zf.read("word/commentsIds.xml") if "word/commentsIds.xml" in names else b""
+            )
+            document_bytes = (
+                zf.read("word/document.xml") if "word/document.xml" in names else b""
+            )
+    except zipfile.BadZipFile as e:
+        raise DocxParseError("Not a valid Word document (.docx).") from e
 
     if debug:
         _debug_dump("version", version.name, mode="w")
@@ -494,43 +410,46 @@ def extract_comments(
     if not comments_bytes:
         return [], version
 
-    comments, para_to_comment = _parse_comments(comments_bytes)
+    try:
+        comments, para_to_comment = _parse_comments(comments_bytes)
 
-    if debug:
-        _debug_dump("para_to_comment after _parse_comments", str(para_to_comment))
-
-    if version == WordVersion.MODERN:
-        para_to_owner = _parse_comments_ids(ids_bytes)
-        for para_id, owner_para_id in para_to_owner.items():
-            if para_id not in para_to_comment and owner_para_id in para_to_comment:
-                para_to_comment[para_id] = para_to_comment[owner_para_id]
-        _apply_extended(comments, para_to_comment, extended_bytes)
-
-    elif version == WordVersion.EXTENDED:
-        if document_bytes:
-            para_to_comment.update(_build_para_to_comment_from_document(document_bytes))
         if debug:
-            _debug_dump(
-                "para_to_comment after _build_para_to_comment_from_document",
-                str(para_to_comment),
-            )
-            ext_root = ET.fromstring(extended_bytes)
-            _debug_dump(
-                "commentsExtended paraId / paraIdParent pairs",
-                str(
-                    [
-                        (ce.get(f"{{{W15}}}paraId"), ce.get(f"{{{W15}}}paraIdParent"))
-                        for ce in ext_root.findall(_tag(W15, "commentEx"))
-                    ]
-                ),
-            )
-        _apply_extended(comments, para_to_comment, extended_bytes)
+            _debug_dump("para_to_comment after _parse_comments", str(para_to_comment))
 
-    if document_bytes:
-        contexts = _parse_document_context(document_bytes)
-        for cid, ctx in contexts.items():
-            if cid in comments:
-                comments[cid].context = ctx
+        if version == WordVersion.MODERN:
+            para_to_owner = _parse_comments_ids(ids_bytes)
+            for para_id, owner_para_id in para_to_owner.items():
+                if para_id not in para_to_comment and owner_para_id in para_to_comment:
+                    para_to_comment[para_id] = para_to_comment[owner_para_id]
+            _apply_extended(comments, para_to_comment, extended_bytes)
+
+        elif version == WordVersion.EXTENDED:
+            if document_bytes:
+                para_to_comment.update(_build_para_to_comment_from_document(document_bytes))
+            if debug:
+                _debug_dump(
+                    "para_to_comment after _build_para_to_comment_from_document",
+                    str(para_to_comment),
+                )
+                ext_root = ET.fromstring(extended_bytes)
+                _debug_dump(
+                    "commentsExtended paraId / paraIdParent pairs",
+                    str(
+                        [
+                            (ce.get(f"{{{W15}}}paraId"), ce.get(f"{{{W15}}}paraIdParent"))
+                            for ce in ext_root.findall(_tag(W15, "commentEx"))
+                        ]
+                    ),
+                )
+            _apply_extended(comments, para_to_comment, extended_bytes)
+
+        if document_bytes:
+            contexts = _parse_document_context(document_bytes)
+            for cid, ctx in contexts.items():
+                if cid in comments:
+                    comments[cid].context = ctx
+    except ET.ParseError as e:
+        raise DocxParseError(f"Document XML is malformed: {e}") from e
 
     return _build_tree(comments), version
 
@@ -549,10 +468,15 @@ def extract_paragraphs(docx: DocxSource) -> DocumentParagraphs:
                   moveFrom) and provides a stable reference to original
                   paragraph positions.
     """
-    with zipfile.ZipFile(docx) as z:
-        if "word/document.xml" not in z.namelist():
-            return DocumentParagraphs(paragraphs=[], moved_from={})
-        root = ET.fromstring(z.read("word/document.xml"))
+    try:
+        with zipfile.ZipFile(docx) as z:
+            if "word/document.xml" not in z.namelist():
+                return DocumentParagraphs(paragraphs=[], moved_from={})
+            root = ET.fromstring(z.read("word/document.xml"))
+    except zipfile.BadZipFile as e:
+        raise DocxParseError("Not a valid Word document (.docx).") from e
+    except ET.ParseError as e:
+        raise DocxParseError(f"Document XML is malformed: {e}") from e
 
     parent_map = _build_parent_map(root)
 

@@ -15,13 +15,18 @@ import io
 from collections import defaultdict
 from textwrap import shorten
 
+from src.utils.page import require_document
+
 import numpy as np
-import spacy
 import streamlit as st
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 
+from src.app_state import KEY_ASSESSED_ISSUES
 from src.comments.extract import Comment, extract_comments, extract_paragraphs
+from src.nlp.entailment import contentiousness_score, template_score
+from src.stats.render import AUTHOR_PALETTE
+from src.utils.models import get_cross_encoder, get_sentence_transformer, get_spacy_nlp
 
 
 # ---------------------------------------------------------------------------
@@ -54,40 +59,40 @@ _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
 _RISK_COLOR = {"high": "#8b3535", "medium": "#7a5a20", "low": "#2e6b42"}
 _RISK_LABEL = {"high": "High", "medium": "Medium", "low": "Low"}
 
-# Tableau10 desaturated — same palette as document_statistics / src/stats/render.py
-_AUTHOR_PALETTE = [
-    "#7fa7c9", "#f5b97a", "#e88b8c", "#9dcdc9",
-    "#8dbc8a", "#f2d97e", "#c9a3c4", "#ffbfc8",
-    "#c0a08a", "#d0ccc8",
-]
 
 _ACCEPTING_KW = {
-    "agree", "agreed", "accept", "accepted", "approved", "approve",
-    "ok", "fine", "no objection", "looks good", "confirmed",
+    "agree",
+    "agreed",
+    "accept",
+    "accepted",
+    "approved",
+    "approve",
+    "ok",
+    "fine",
+    "no objection",
+    "looks good",
+    "confirmed",
 }
 _PUSHING_KW = {
-    "propose", "suggested", "suggest", "reject", "rejected", "object",
-    "disagree", "revise", "revised", "delete", "remove", "change", "modify",
-    "alternative", "instead", "replace", "amend", "redline",
+    "propose",
+    "suggested",
+    "suggest",
+    "reject",
+    "rejected",
+    "object",
+    "disagree",
+    "revise",
+    "revised",
+    "delete",
+    "remove",
+    "change",
+    "modify",
+    "alternative",
+    "instead",
+    "replace",
+    "amend",
+    "redline",
 }
-
-
-# ---------------------------------------------------------------------------
-# Cached models
-# ---------------------------------------------------------------------------
-@st.cache_resource(show_spinner=False)
-def _get_encoder() -> SentenceTransformer:
-    return SentenceTransformer("all-MiniLM-L6-v2")
-
-
-@st.cache_resource(show_spinner=False)
-def _get_nli(model_name: str) -> CrossEncoder:
-    return CrossEncoder(model_name)
-
-
-@st.cache_resource(show_spinner=False)
-def _get_nlp():
-    return spacy.load("en_core_web_sm")
 
 
 # ---------------------------------------------------------------------------
@@ -184,42 +189,6 @@ def _best_snippet(texts: list[str], default: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# NLI scoring
-# ---------------------------------------------------------------------------
-def _softmax(logits: np.ndarray) -> np.ndarray:
-    exp = np.exp(logits - logits.max(axis=-1, keepdims=True))
-    return exp / exp.sum(axis=-1, keepdims=True)
-
-
-def _template_score(nli: CrossEncoder, premise: str, templates: list[str]) -> float:
-    """Average entailment probability of premise against a list of templates."""
-    if not premise.strip():
-        return 0.0
-    probs = _softmax(nli.predict([(premise, t) for t in templates]))
-    return float(probs[:, 1].mean())  # index 1 = Supporting (MNLI convention)
-
-
-def _contentiousness(nli: CrossEncoder, comments: list[Comment]) -> float:
-    """Average contradiction probability across comment pairs (including replies)."""
-    texts = [c.text.strip() for c in comments if c.text.strip()]
-    for c in comments:
-        texts += [r.text.strip() for r in c.replies if r.text.strip()]
-
-    if len(texts) < 2:
-        return 0.0
-
-    cap = min(len(texts), 5)
-    pairs = [
-        (texts[i], texts[j])
-        for i in range(cap)
-        for j in range(cap)
-        if i != j
-    ]
-    probs = _softmax(nli.predict(pairs))
-    return float(probs[:, 0].mean())  # index 0 = Contradicting
-
-
-# ---------------------------------------------------------------------------
 # Issue assessor
 # ---------------------------------------------------------------------------
 def _assess_issue(
@@ -243,7 +212,8 @@ def _assess_issue(
     clause_text, para_idx = _primary_clause(group)
 
     # 2. Contentiousness
-    cont = _contentiousness(nli, group)
+    comment_texts = [c.text for c in group] + [r.text for c in group for r in c.replies]
+    cont = contentiousness_score(nli, comment_texts)
 
     # 3. Expand context if clause is too short or contentiousness is ambiguous.
     short_clause = len(clause_text.strip()) < 80
@@ -260,8 +230,8 @@ def _assess_issue(
         scoring_text = clause_text  # last resort
 
     # 4. Template scoring
-    high_score = _template_score(nli, scoring_text, _HIGH_TEMPLATES)
-    med_score = _template_score(nli, scoring_text, _MEDIUM_TEMPLATES)
+    high_score = template_score(nli, scoring_text, _HIGH_TEMPLATES)
+    med_score = template_score(nli, scoring_text, _MEDIUM_TEMPLATES)
 
     # 5. Risk level: template signal + contentiousness heat
     effective_high = high_score * 0.6 + (cont if cont > 0.4 else 0.0) * 0.4
@@ -281,11 +251,17 @@ def _assess_issue(
 
     rationale_parts = []
     if cont > 0.3:
-        rationale_parts.append(f"active disagreement between commenters (score {cont:.2f})")
+        rationale_parts.append(
+            f"active disagreement between commenters (score {cont:.2f})"
+        )
     if high_score > 0.25:
-        rationale_parts.append(f"clause matches high-risk language patterns (score {high_score:.2f})")
+        rationale_parts.append(
+            f"clause matches high-risk language patterns (score {high_score:.2f})"
+        )
     if med_score > 0.3 and risk_level == "medium":
-        rationale_parts.append(f"clause matches standard risk patterns (score {med_score:.2f})")
+        rationale_parts.append(
+            f"clause matches standard risk patterns (score {med_score:.2f})"
+        )
     if not rationale_parts:
         rationale_parts.append("routine clause with low negotiation friction")
     if context_expanded:
@@ -313,7 +289,9 @@ def _assess_issue(
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def _embed_threads(texts: tuple[str, ...]) -> np.ndarray:
-    return _get_encoder().encode(list(texts), show_progress_bar=False, normalize_embeddings=True)
+    return get_sentence_transformer("all-MiniLM-L6-v2").encode(
+        list(texts), show_progress_bar=False, normalize_embeddings=True
+    )
 
 
 def _cluster_comments(comments: list[Comment], n: int) -> list[list[int]]:
@@ -346,18 +324,18 @@ def _positions_html(positions: list[dict], color_map: dict[str, str]) -> str:
     for pos in positions:
         party = pos.get("party", "Unknown")
         stance = html.escape(pos.get("stance", ""))
-        bg_color = color_map.get(party, _AUTHOR_PALETTE[0])
+        bg_color = color_map.get(party, AUTHOR_PALETTE[0])
         initials = _initials(party)
         avatar = (
             f'<div style="width:28px;height:28px;border-radius:50%;background:{bg_color};'
-            f'display:flex;align-items:center;justify-content:center;'
+            f"display:flex;align-items:center;justify-content:center;"
             f'font-size:0.65em;font-weight:700;flex-shrink:0;color:#333">{initials}</div>'
         )
         body = (
             f'<div style="flex:1;min-width:0">'
             f'<div style="font-weight:600;font-size:0.84em;color:#333;margin-bottom:1px">{html.escape(party)}</div>'
             f'<div style="font-size:0.82em;color:#666;line-height:1.45">{stance}</div>'
-            f'</div>'
+            f"</div>"
         )
         rows.append(
             f'<div style="display:flex;align-items:flex-start;gap:10px;margin:7px 0">{avatar}{body}</div>'
@@ -384,7 +362,7 @@ def _issue_card(issue: dict, color_map: dict[str, str]) -> str:
         clause_block = (
             f'<div style="margin:0 20px 14px 20px;background:#f9f9f9;border-left:3px solid {color};'
             f'padding:9px 13px;font-size:0.86em;color:#555;line-height:1.55;font-style:italic">'
-            f'{clause_h}</div>'
+            f"{clause_h}</div>"
         )
 
     positions = _positions_html(issue.get("positions", []), color_map)
@@ -395,24 +373,29 @@ def _issue_card(issue: dict, color_map: dict[str, str]) -> str:
             f'<div style="padding:10px 20px 12px 20px">{positions}</div>'
         )
 
-    footer_parts = [f"¶{issue['para_idx']}", f"{issue['n_comments']} comment{'s' if issue['n_comments'] != 1 else ''}"]
+    footer_parts = [
+        f"¶{issue['para_idx']}",
+        f"{issue['n_comments']} comment{'s' if issue['n_comments'] != 1 else ''}",
+    ]
     footer_inner = "&ensp;·&ensp;".join(footer_parts)
 
     badge = (
         f'<span style="font-size:0.75em;font-weight:600;color:{color};'
         f'border:1px solid {color};padding:2px 9px;border-radius:10px">{label}</span>'
     )
-    status_span = f'<span style="font-size:0.78em;color:{status_color}">{status_label}</span>'
+    status_span = (
+        f'<span style="font-size:0.78em;color:{status_color}">{status_label}</span>'
+    )
     header = (
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;'
         f'padding:15px 20px 11px 20px">'
         f'<div style="font-weight:600;font-size:0.97em;color:#1a1a2e;line-height:1.35;margin-right:14px">{name_h}</div>'
         f'<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-top:2px">{badge}{status_span}</div>'
-        f'</div>'
+        f"</div>"
     )
     rationale_row = (
         f'<div style="padding:0 20px 13px 20px;font-size:0.8em;color:#777;line-height:1.45">'
-        f'{rationale_h}</div>'
+        f"{rationale_h}</div>"
     )
     footer_row = (
         f'<div style="background:#fafafa;border-top:1px solid #f0f0f0;padding:6px 20px;'
@@ -422,27 +405,27 @@ def _issue_card(issue: dict, color_map: dict[str, str]) -> str:
     return (
         f'<div style="border-radius:6px;border:1px solid #e8eaed;border-top:3px solid {color};'
         f'background:#fff;margin-bottom:14px;overflow:hidden">'
-        f'{header}{clause_block}{rationale_row}{positions_block}{footer_row}'
-        f'</div>'
+        f"{header}{clause_block}{rationale_row}{positions_block}{footer_row}"
+        f"</div>"
     )
 
 
 def _summary_row(high_n: int, med_n: int, low_n: int, total_n: int) -> str:
     items = [
-        (str(total_n), "issues",  "#262730"),
-        (str(high_n),  "high",    _RISK_COLOR["high"]),
-        (str(med_n),   "medium",  _RISK_COLOR["medium"]),
-        (str(low_n),   "low",     _RISK_COLOR["low"]),
+        (str(total_n), "issues", "#262730"),
+        (str(high_n), "high", _RISK_COLOR["high"]),
+        (str(med_n), "medium", _RISK_COLOR["medium"]),
+        (str(low_n), "low", _RISK_COLOR["low"]),
     ]
     cells = "".join(
         f'<div style="flex:1;text-align:center;padding:12px 0;border-right:1px solid #f0f0f0">'
         f'<div style="font-size:1.7em;font-weight:700;color:#262730;line-height:1">{v}</div>'
         f'<div style="font-size:0.72em;color:{c};margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">{l}</div>'
-        f'</div>'
+        f"</div>"
         for v, l, c in items
     )
-    cells = cells.rsplit('border-right:1px solid #f0f0f0', 1)
-    cells = 'border-right:none'.join(cells)
+    cells = cells.rsplit("border-right:1px solid #f0f0f0", 1)
+    cells = "border-right:none".join(cells)
     return (
         f'<div style="display:flex;border:1px solid #e8eaed;border-radius:6px;'
         f'background:#fff;margin-bottom:16px">{cells}</div>'
@@ -462,10 +445,7 @@ def _load_data(file_bytes: bytes):
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
-file_bytes = st.session_state.get("p1_file_bytes")
-if not file_bytes:
-    st.info("Upload a document on the Document Statistics page to get started.")
-    st.stop()
+file_bytes = require_document()
 
 all_comments, paragraphs = _load_data(file_bytes)
 top_level = [c for c in all_comments if not c.parent_id]
@@ -494,19 +474,23 @@ working = [c for c in top_level if not c.resolved] if open_only else top_level
 # Main
 st.subheader("Issues Overview")
 if not working:
-    st.warning("No open comments found. Uncheck **Open issues only** in the sidebar to include resolved ones.")
+    st.warning(
+        "No open comments found. Uncheck **Open issues only** in the sidebar to include resolved ones."
+    )
     st.stop()
 
 open_count = sum(1 for c in top_level if not c.resolved)
 resolved_count = len(top_level) - open_count
-st.caption(f"{len(top_level)} comment threads · {open_count} open · {resolved_count} resolved · analysing {len(working)}")
+st.caption(
+    f"{len(top_level)} comment threads · {open_count} open · {resolved_count} resolved · analysing {len(working)}"
+)
 
 if st.button("Generate Report", type="primary"):
-    st.session_state.pop("p5_issues", None)
+    st.session_state.pop(KEY_ASSESSED_ISSUES, None)
 
     with st.spinner("Loading models…"):
-        nli = _get_nli(nli_model_name)
-        nlp = _get_nlp()
+        nli = get_cross_encoder(nli_model_name)
+        nlp = get_spacy_nlp()
 
     texts = tuple(_thread_text(c) for c in working)
     embeddings = _embed_threads(texts)
@@ -519,28 +503,30 @@ if st.button("Generate Report", type="primary"):
     for gi, group_indices in enumerate(groups):
         group_comments = [working[i] for i in group_indices]
         preview = shorten(group_comments[0].text or "", 60, placeholder="…")
-        status_line.caption(f'Issue {gi + 1}/{len(groups)}: \u201c{preview}\u201d')
+        status_line.caption(f"Issue {gi + 1}/{len(groups)}: \u201c{preview}\u201d")
 
-        issue = _assess_issue(group_comments, paragraphs, nli, nlp, embeddings, group_indices)
+        issue = _assess_issue(
+            group_comments, paragraphs, nli, nlp, embeddings, group_indices
+        )
         issues.append(issue)
         prog.progress((gi + 1) / len(groups))
 
     status_line.empty()
     prog.empty()
-    st.session_state["p5_issues"] = issues
+    st.session_state[KEY_ASSESSED_ISSUES] = issues
 
 # ---------------------------------------------------------------------------
 # Render results
 # ---------------------------------------------------------------------------
-issues: list[dict] = st.session_state.get("p5_issues", [])
+issues: list[dict] = st.session_state.get(KEY_ASSESSED_ISSUES, [])
 if not issues:
     st.stop()
 
 sorted_issues = sorted(issues, key=lambda x: _RISK_ORDER.get(x["risk_level"], 2))
 
-high_n  = sum(1 for i in sorted_issues if i["risk_level"] == "high")
-med_n   = sum(1 for i in sorted_issues if i["risk_level"] == "medium")
-low_n   = sum(1 for i in sorted_issues if i["risk_level"] == "low")
+high_n = sum(1 for i in sorted_issues if i["risk_level"] == "high")
+med_n = sum(1 for i in sorted_issues if i["risk_level"] == "medium")
+low_n = sum(1 for i in sorted_issues if i["risk_level"] == "low")
 total_n = len(sorted_issues)
 
 # Summary row
@@ -548,13 +534,11 @@ st.markdown(_summary_row(high_n, med_n, low_n, total_n), unsafe_allow_html=True)
 
 
 # Build global author color map (sorted, matching document_statistics assignment)
-all_authors = sorted({
-    pos["party"]
-    for issue in sorted_issues
-    for pos in issue.get("positions", [])
-})
+all_authors = sorted(
+    {pos["party"] for issue in sorted_issues for pos in issue.get("positions", [])}
+)
 author_color_map = {
-    author: _AUTHOR_PALETTE[i % len(_AUTHOR_PALETTE)]
+    author: AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)]
     for i, author in enumerate(all_authors)
 }
 

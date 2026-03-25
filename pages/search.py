@@ -9,55 +9,22 @@ Supports three search methods:
 
 import io
 import re
-from collections.abc import Sequence
 
 import numpy as np
 import streamlit as st
-from sentence_transformers import SentenceTransformer
 
 from src.comments.extract import extract_paragraphs
-
-
-# ---------------------------------------------------------------------------
-# Search helpers  (BM25 + tokenizer lifted from topic_exploration.py)
-# ---------------------------------------------------------------------------
-def _tokenize(text: str) -> list[str]:
-    return re.findall(r"\b\w+\b", text.lower())
-
-
-def _bm25_scores(docs: Sequence[str], query: str, k1: float = 1.5, b: float = 0.75) -> np.ndarray:
-    query_terms = _tokenize(query)
-    if not query_terms:
-        return np.zeros(len(docs), dtype=float)
-
-    tokenized_docs = [_tokenize(doc) for doc in docs]
-    doc_lens = np.array([len(t) for t in tokenized_docs], dtype=float)
-    avgdl = float(doc_lens.mean()) if len(doc_lens) else 1.0
-    n_docs = len(docs)
-
-    doc_freq: dict[str, int] = {}
-    for tokens in tokenized_docs:
-        for term in set(tokens):
-            doc_freq[term] = doc_freq.get(term, 0) + 1
-
-    scores = np.zeros(n_docs, dtype=float)
-    for term in query_terms:
-        df = doc_freq.get(term, 0)
-        if df == 0:
-            continue
-        idf = np.log((n_docs - df + 0.5) / (df + 0.5) + 1.0)
-        for i, tokens in enumerate(tokenized_docs):
-            tf = tokens.count(term)
-            denom = tf + k1 * (1 - b + b * doc_lens[i] / avgdl)
-            scores[i] += idf * (tf * (k1 + 1)) / denom
-
-    return scores
+from src.shared import DocxParseError
+from src.utils.models import get_sentence_transformer
+from src.utils.text import bm25_scores
 
 
 def _keyword_highlight(text: str, query: str) -> str:
     if not query:
         return text
-    return re.sub(f"({re.escape(query)})", r"<mark>\1</mark>", text, flags=re.IGNORECASE)
+    return re.sub(
+        f"({re.escape(query)})", r"<mark>\1</mark>", text, flags=re.IGNORECASE
+    )
 
 
 def _regex_highlight(text: str, pattern: re.Pattern) -> str:
@@ -65,13 +32,8 @@ def _regex_highlight(text: str, pattern: re.Pattern) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Cached models + extraction
+# Cached extraction
 # ---------------------------------------------------------------------------
-@st.cache_resource(show_spinner=False)
-def _get_encoder(model_name: str) -> SentenceTransformer:
-    return SentenceTransformer(model_name)
-
-
 @st.cache_data(show_spinner=False)
 def _extract(file_bytes: bytes) -> list[str]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
@@ -80,8 +42,10 @@ def _extract(file_bytes: bytes) -> list[str]:
 
 @st.cache_data(show_spinner=False)
 def _embed(texts: tuple[str, ...], model_name: str) -> np.ndarray:
-    encoder = _get_encoder(model_name)
-    return encoder.encode(list(texts), show_progress_bar=False, normalize_embeddings=True)
+    encoder = get_sentence_transformer(model_name)
+    return encoder.encode(
+        list(texts), show_progress_bar=False, normalize_embeddings=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +82,11 @@ max_results = st.sidebar.slider("Max results", 5, 50, 20)
 # Build corpus: list of (doc_name, para_text)
 corpus: list[tuple[str, str]] = []
 for f in uploaded:
-    paras = _extract(f.getvalue())
+    try:
+        paras = _extract(f.getvalue())
+    except DocxParseError:
+        st.warning(f"'{f.name}' is not a valid Word document and was skipped.")
+        continue
     for p in paras:
         corpus.append((f.name, p))
 
@@ -126,7 +94,9 @@ doc_names = [name for name, _ in corpus]
 texts = [text for _, text in corpus]
 
 total_docs = len({n for n in doc_names})
-st.caption(f"{total_docs} document{'s' if total_docs != 1 else ''} · {len(texts)} passages")
+st.caption(
+    f"{total_docs} document{'s' if total_docs != 1 else ''} · {len(texts)} passages"
+)
 
 # Search input
 query = st.text_input(
@@ -155,15 +125,17 @@ elif method == "Regex":
     hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)][:max_results]
 
 elif method == "Relevance":
-    scores = _bm25_scores(texts, q)
+    scores = bm25_scores(texts, q)
     ranked = np.argsort(-scores)
     hits = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0][:max_results]
 
 else:  # Semantic
     with st.spinner("Embedding…"):
         corpus_embs = _embed(tuple(texts), model_name)
-        encoder = _get_encoder(model_name)
-        q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
+        encoder = get_sentence_transformer(model_name)
+        q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[
+            0
+        ]
     sims = corpus_embs @ q_emb
     ranked = np.argsort(-sims)
     hits = [(int(i), float(sims[i])) for i in ranked[:max_results]]

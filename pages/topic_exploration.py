@@ -1,6 +1,5 @@
 import io
 import json
-import math
 import re
 from collections.abc import Sequence
 
@@ -13,10 +12,13 @@ from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 import Stemmer as _PyStemmer
 from spacy.lang.en.stop_words import STOP_WORDS
-from sentence_transformers import SentenceTransformer
 from umap import UMAP
 
+from src.app_state import KEY_TOPIC_RANK_LIMIT, KEY_TOPIC_SEMANTIC_MIN
 from src.comments.extract import extract_paragraphs
+from src.utils.models import get_sentence_transformer
+from src.utils.page import require_document
+from src.utils.text import bm25_scores, tokenize
 
 
 def _clean_docs(paragraphs: Sequence[str], min_chars: int) -> list[str]:
@@ -58,13 +60,8 @@ def _topic_labels(topic_model: BERTopic, topics: list[int]) -> np.ndarray:
 
 
 @st.cache_resource(show_spinner=False)
-def _get_encoder(embedding_model_name: str) -> SentenceTransformer:
-    return SentenceTransformer(embedding_model_name)
-
-
-@st.cache_resource(show_spinner=False)
 def _embed_docs(docs: tuple[str, ...], embedding_model_name: str) -> np.ndarray:
-    encoder = _get_encoder(embedding_model_name)
+    encoder = get_sentence_transformer(embedding_model_name)
     return encoder.encode(list(docs), show_progress_bar=False)
 
 
@@ -78,7 +75,9 @@ def _fit_topics(
     model = BERTopic(
         min_topic_size=min_topic_size,
         vectorizer_model=CountVectorizer(stop_words="english"),
-        seed_topic_list=[list(group) for group in seed_topic_list] if seed_topic_list else None,
+        seed_topic_list=[list(group) for group in seed_topic_list]
+        if seed_topic_list
+        else None,
         calculate_probabilities=False,
         verbose=False,
     )
@@ -87,7 +86,9 @@ def _fit_topics(
 
 
 @st.cache_resource(show_spinner=False)
-def _reduce_to_2d(embeddings: np.ndarray, n_neighbors: int, min_dist: float) -> np.ndarray:
+def _reduce_to_2d(
+    embeddings: np.ndarray, n_neighbors: int, min_dist: float
+) -> np.ndarray:
     reducer = UMAP(
         n_neighbors=n_neighbors,
         n_components=2,
@@ -108,14 +109,24 @@ def _default_granularity(n_docs: int) -> tuple[int, int, int]:
 
 
 _TOPIC_PALETTE = [
-    "#ffe066", "#b5ead7", "#b5d5ff", "#e8b5ff", "#ffb5b5",
-    "#ffd9b5", "#b5ffe4", "#c9ffb5", "#ffb5e8", "#b5f0ff",
+    "#ffe066",
+    "#b5ead7",
+    "#b5d5ff",
+    "#e8b5ff",
+    "#ffb5b5",
+    "#ffd9b5",
+    "#b5ffe4",
+    "#c9ffb5",
+    "#ffb5e8",
+    "#b5f0ff",
 ]
 
 
 def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
     unique = [l for l in dict.fromkeys(label_layer) if l != "Noise"]
-    return {label: _TOPIC_PALETTE[i % len(_TOPIC_PALETTE)] for i, label in enumerate(unique)}
+    return {
+        label: _TOPIC_PALETTE[i % len(_TOPIC_PALETTE)] for i, label in enumerate(unique)
+    }
 
 
 def _highlight_topic_keywords(text: str, topic_label: str, color: str) -> str:
@@ -151,9 +162,7 @@ _stemmer = _PyStemmer.Stemmer("english")
 
 def _highlight_query_tokens(text: str, query: str) -> str:
     stemmed_terms = {
-        _stemmer.stemWord(term)
-        for term in _tokenize(query)
-        if term not in STOP_WORDS
+        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
     }
     if not stemmed_terms:
         return text
@@ -167,46 +176,7 @@ def _highlight_query_tokens(text: str, query: str) -> str:
     return re.sub(r"\b\w+\b", _replace, text)
 
 
-def _tokenize(text: str) -> list[str]:
-    return re.findall(r"\b\w+\b", text.lower())
-
-
-def _bm25_scores(docs: Sequence[str], query: str, k1: float = 1.5, b: float = 0.75) -> np.ndarray:
-    query_terms = _tokenize(query)
-    if not query_terms:
-        return np.zeros(len(docs), dtype=float)
-
-    tokenized_docs = [_tokenize(doc) for doc in docs]
-    doc_lens = np.array([len(tokens) for tokens in tokenized_docs], dtype=float)
-    avgdl = float(doc_lens.mean()) if len(doc_lens) else 0.0
-    n_docs = len(docs)
-
-    doc_freq: dict[str, int] = {}
-    for tokens in tokenized_docs:
-        for term in set(tokens):
-            doc_freq[term] = doc_freq.get(term, 0) + 1
-
-    scores = np.zeros(n_docs, dtype=float)
-    for idx, tokens in enumerate(tokenized_docs):
-        tf: dict[str, int] = {}
-        for term in tokens:
-            tf[term] = tf.get(term, 0) + 1
-        dl = max(doc_lens[idx], 1.0)
-        for term in query_terms:
-            if term not in tf:
-                continue
-            df = doc_freq.get(term, 0)
-            idf = math.log(1 + (n_docs - df + 0.5) / (df + 0.5))
-            freq = tf[term]
-            denom = freq + k1 * (1 - b + b * dl / max(avgdl, 1.0))
-            scores[idx] += idf * (freq * (k1 + 1)) / max(denom, 1e-9)
-    return scores
-
-
-file_bytes = st.session_state.get("p1_file_bytes")
-if not file_bytes:
-    st.info("Upload a document on Page 1 to get started.")
-    st.stop()
+file_bytes = require_document()
 
 doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
 
@@ -231,7 +201,10 @@ min_chars = st.sidebar.slider(
 )
 embedding_model_name = st.sidebar.selectbox(
     "Embedding model",
-    options=["all-mpnet-base-v2", "all-MiniLM-L6-v2",],
+    options=[
+        "all-mpnet-base-v2",
+        "all-MiniLM-L6-v2",
+    ],
     index=0,
     help="This model converts each paragraph into vectors before topic clustering.",
 )
@@ -252,17 +225,20 @@ st.markdown("#### Search")
 search_query = st.text_input(
     "Filter text",
     label_visibility="collapsed",
-    key="p3_search_query",
+    key="topic_search_query",
     placeholder="Search across all topics...",
 )
-search_method = st.pills(
-    "Search type",
-    options=["Keyword", "Regex", "Relevance", "Semantic"],
-    default="Keyword",
-    key="p3_search_method",
-    label_visibility="collapsed",
-    selection_mode="single",
-) or "Keyword"
+search_method = (
+    st.pills(
+        "Search type",
+        options=["Keyword", "Regex", "Relevance", "Semantic"],
+        default="Keyword",
+        key="topic_search_method",
+        label_visibility="collapsed",
+        selection_mode="single",
+    )
+    or "Keyword"
+)
 if search_method != "Keyword":
     st.sidebar.markdown("### Search")
     rank_limit = st.sidebar.slider(
@@ -271,7 +247,7 @@ if search_method != "Keyword":
         max_value=500,
         value=200,
         step=10,
-        key="p3_rank_limit",
+        key="topic_rank_limit",
     )
     if search_method == "Semantic":
         semantic_min_score = st.sidebar.slider(
@@ -280,14 +256,14 @@ if search_method != "Keyword":
             max_value=1.0,
             value=0.20,
             step=0.01,
-            key="p3_semantic_min_score",
+            key="topic_semantic_min",
             help="Higher values return stricter matches.",
         )
     else:
-        semantic_min_score = st.session_state.get("p3_semantic_min_score", 0.20)
+        semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
 else:
-    rank_limit = st.session_state.get("p3_rank_limit", 200)
-    semantic_min_score = st.session_state.get("p3_semantic_min_score", 0.20)
+    rank_limit = st.session_state.get(KEY_TOPIC_RANK_LIMIT, 200)
+    semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
 
 
 normalized_query = search_query.strip().lower()
@@ -330,7 +306,7 @@ with st.sidebar.expander("Seed words (advanced)", expanded=False):
     seed_words_raw = st.text_area(
         "Seed words",
         label_visibility="collapsed",
-        key="p3_seed_words",
+        key="topic_seed_words",
         placeholder="privacy, personal data, consent\nliability, damages\ntermination, expiry",
         height=120,
     )
@@ -357,7 +333,9 @@ with st.spinner("Embedding and modeling topics..."):
     label_layers: list[np.ndarray] = []
     topic_counts: list[int] = []
     for min_topic_size in granularity_sizes:
-        topic_model, topics = _fit_topics(docs_tuple, embeddings, min_topic_size, seed_topic_list)
+        topic_model, topics = _fit_topics(
+            docs_tuple, embeddings, min_topic_size, seed_topic_list
+        )
         labels = _topic_labels(topic_model, topics)
         label_layers.append(labels)
         n_topics = len({t for t in topics if t != -1})
@@ -366,13 +344,7 @@ with st.spinner("Embedding and modeling topics..."):
 st.sidebar.markdown("### Topics")
 sidebar_stats_cols = st.sidebar.columns(len(granularity_sizes))
 for idx, size in enumerate(granularity_sizes):
-    topic_name = (
-        "Broad"
-        if idx == 0
-        else "Mid"
-        if idx == 1
-        else "Detailed"
-    )
+    topic_name = "Broad" if idx == 0 else "Mid" if idx == 1 else "Detailed"
     sidebar_stats_cols[idx].metric(topic_name, topic_counts[idx])
 
 has_noise = any((labels == "Noise").any() for labels in label_layers)
@@ -386,7 +358,9 @@ score_map: dict[int, float] = {}
 if not normalized_query:
     matched_indices = list(range(len(docs)))
 elif search_method == "Keyword":
-    matched_indices = [idx for idx, text in enumerate(docs) if normalized_query in text.lower()]
+    matched_indices = [
+        idx for idx, text in enumerate(docs) if normalized_query in text.lower()
+    ]
 elif search_method == "Regex":
     try:
         pattern = re.compile(search_query.strip(), flags=re.IGNORECASE)
@@ -395,18 +369,22 @@ elif search_method == "Regex":
         st.warning(f"Invalid regex: {e}")
         matched_indices = []
 elif search_method == "Relevance":
-    bm25_scores = _bm25_scores(docs, normalized_query)
-    ranked = np.argsort(-bm25_scores)
-    matched_indices = [int(i) for i in ranked if bm25_scores[i] > 0][:rank_limit]
-    score_map = {int(i): float(bm25_scores[i]) for i in matched_indices}
+    scores = bm25_scores(docs, normalized_query)
+    ranked = np.argsort(-scores)
+    matched_indices = [int(i) for i in ranked if scores[i] > 0][:rank_limit]
+    score_map = {int(i): float(scores[i]) for i in matched_indices}
 else:
-    encoder = _get_encoder(embedding_model_name)
+    encoder = get_sentence_transformer(embedding_model_name)
     query_embedding = encoder.encode([normalized_query], show_progress_bar=False)[0]
     doc_norms = np.linalg.norm(embeddings, axis=1)
     query_norm = float(np.linalg.norm(query_embedding))
-    cosine_scores = (embeddings @ query_embedding) / np.clip(doc_norms * query_norm, 1e-9, None)
+    cosine_scores = (embeddings @ query_embedding) / np.clip(
+        doc_norms * query_norm, 1e-9, None
+    )
     ranked = np.argsort(-cosine_scores)
-    matched_indices = [int(i) for i in ranked if cosine_scores[i] >= semantic_min_score][:rank_limit]
+    matched_indices = [
+        int(i) for i in ranked if cosine_scores[i] >= semantic_min_score
+    ][:rank_limit]
     score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
 
 if len(matched_indices) >= 10:
@@ -457,11 +435,15 @@ window.openDoc = function(paraIdx) {{
     with st.expander("Topic map", expanded=expanded):
         components.html(plot_html, height=860, scrolling=False)
 elif matched_indices:
-    st.info("Too few matches to render a map (minimum 10). Results are shown in the table below.")
+    st.info(
+        "Too few matches to render a map (minimum 10). Results are shown in the table below."
+    )
 else:
     st.info("No text matches your search. Try a broader term.")
 
-max_rows = st.sidebar.slider("Max rows", min_value=10, max_value=500, value=100, step=10, key="p3_max_rows")
+max_rows = st.sidebar.slider(
+    "Max rows", min_value=10, max_value=500, value=100, step=10, key="topic_max_rows"
+)
 
 results_df = pd.DataFrame(
     {
@@ -471,10 +453,16 @@ results_df = pd.DataFrame(
 )
 topic_columns = ["Broad topics", "Mid-level topics", "Detailed topics"]
 for idx, size in enumerate(granularity_sizes):
-    topic_col_name = topic_columns[idx] if idx < len(topic_columns) else f"Topics {idx + 1}"
+    topic_col_name = (
+        topic_columns[idx] if idx < len(topic_columns) else f"Topics {idx + 1}"
+    )
     results_df[topic_col_name] = label_layers[idx]
 
-results_df = results_df.iloc[matched_indices].reset_index(drop=True) if matched_indices else results_df.iloc[0:0]
+results_df = (
+    results_df.iloc[matched_indices].reset_index(drop=True)
+    if matched_indices
+    else results_df.iloc[0:0]
+)
 if score_map:
     results_df["score"] = results_df["paragraph_idx"].map(score_map)
     results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
@@ -488,7 +476,7 @@ if available_topic_cols and not results_df.empty:
         "Granularity",
         options=available_topic_cols,
         index=len(available_topic_cols) - 1,
-        key="p3_topic_filter_col",
+        key="topic_filter_col",
         label_visibility="collapsed",
     )
     topic_options = sorted(t for t in results_df[filter_col].unique() if t != "Noise")
@@ -496,12 +484,14 @@ if available_topic_cols and not results_df.empty:
         "Topics",
         options=topic_options,
         default=[],
-        key="p3_topic_filter_values",
+        key="topic_filter_values",
         placeholder=f"Select {filter_col.lower()}…",
         label_visibility="collapsed",
     )
     if selected_topics:
-        results_df = results_df[results_df[filter_col].isin(selected_topics)].reset_index(drop=True)
+        results_df = results_df[
+            results_df[filter_col].isin(selected_topics)
+        ].reset_index(drop=True)
 
 st.markdown("#### Results")
 st.caption(f"{len(results_df)} passages")
@@ -518,7 +508,7 @@ st.dataframe(
 
 show_markdown = st.checkbox(
     "Expand results",
-    key="p3_print_markdown",
+    key="topic_print_markdown",
     value=False,
 )
 
@@ -539,20 +529,21 @@ if show_markdown:
                 highlighted = _highlight_query_tokens(text, search_query)
             elif search_method == "Regex":
                 try:
-                    highlighted = re.compile(search_query.strip(), flags=re.IGNORECASE).sub(
-                        lambda m: f"<mark>{m.group(0)}</mark>", text
-                    )
+                    highlighted = re.compile(
+                        search_query.strip(), flags=re.IGNORECASE
+                    ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
                 except re.error:
                     highlighted = text
             else:
                 highlighted = _highlight_term(text, search_query)
             # Topic keyword highlighting (on top of search highlighting)
-            topic_label = finest_labels[para_idx] if para_idx < len(finest_labels) else ""
-            color = color_map.get(str(topic_label), "#ffe066")
-            highlighted = _highlight_topic_keywords(highlighted, str(topic_label), color)
-            topics = " → ".join(f"{row[col]}" for col in topic_cols)
-            lines.append(
-                f"#### ¶{para_idx} — {topics}\n\n"
-                f"{highlighted}"
+            topic_label = (
+                finest_labels[para_idx] if para_idx < len(finest_labels) else ""
             )
+            color = color_map.get(str(topic_label), "#ffe066")
+            highlighted = _highlight_topic_keywords(
+                highlighted, str(topic_label), color
+            )
+            topics = " → ".join(f"{row[col]}" for col in topic_cols)
+            lines.append(f"#### ¶{para_idx} — {topics}\n\n{highlighted}")
         st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)

@@ -2,18 +2,11 @@ import io
 import re
 
 import pandas as pd
-import spacy
 import streamlit as st
 
 from src.comments.extract import extract_paragraphs
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-@st.cache_resource(show_spinner=False)
-def _load_nlp():
-    return spacy.load("en_core_web_sm")
+from src.utils.models import get_spacy_nlp
+from src.utils.page import require_document
 
 
 @st.cache_data(show_spinner=False)
@@ -26,7 +19,7 @@ def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
         ),
         # defined as / referred to as / referred to herein as
         re.compile(
-            r'\b(?P<term>[A-Z][A-Za-z\s]{1,60})\b\s+(?:is\s+)?(?:defined\s+as|referred\s+to\s+(?:herein\s+)?as)',
+            r"\b(?P<term>[A-Z][A-Za-z\s]{1,60})\b\s+(?:is\s+)?(?:defined\s+as|referred\s+to\s+(?:herein\s+)?as)",
             re.IGNORECASE,
         ),
         # (hereinafter "Term") or (the "Term")
@@ -53,24 +46,26 @@ def _extract_entities(
     paragraphs: tuple[str, ...],
     labels: tuple[str, ...],
 ) -> pd.DataFrame:
-    nlp = _load_nlp()
+    nlp = get_spacy_nlp()
     rows = []
     for idx, para in enumerate(paragraphs):
         doc = nlp(para)
         for ent in doc.ents:
             if ent.label_ in labels:
-                rows.append({"¶": idx, "Value": ent.text, "Type": ent.label_, "Context": para})
+                rows.append(
+                    {"¶": idx, "Value": ent.text, "Type": ent.label_, "Context": para}
+                )
     return pd.DataFrame(rows)
 
 
 _FALSE_DATE_PATTERNS = re.compile(
     r"^("
-    r"[Ss]ection\s+"           # "Section 4.3.1"
-    r"|\d{1,4}\.\d+"           # "4.3.1", "23.1"
-    r"|\d{1,3}-\d{3,}"         # "23-1202", "15-123456"
-    r"|\d{1,3}-\d+-[a-zA-Z]"   # "23-1202(c)"
-    r"|§\s*\d+"                # "§ 23"
-    r"|\d+\([a-zA-Z]\)"        # "4(b)"
+    r"[Ss]ection\s+"  # "Section 4.3.1"
+    r"|\d{1,4}\.\d+"  # "4.3.1", "23.1"
+    r"|\d{1,3}-\d{3,}"  # "23-1202", "15-123456"
+    r"|\d{1,3}-\d+-[a-zA-Z]"  # "23-1202(c)"
+    r"|§\s*\d+"  # "§ 23"
+    r"|\d+\([a-zA-Z]\)"  # "4(b)"
     r")"
 )
 
@@ -85,6 +80,11 @@ _NUMERIC_PATTERN = re.compile(
 _SECTION_REF = re.compile(
     r"^\d{1,4}\.\d|\d{1,3}-\d{3,}|^§|^\d+\([a-zA-Z]\)|^[Ss]ection\s",
 )
+_OBLIGATION = re.compile(
+    r"\b(shall|must|no later than|prior to|by|before|within|deadline|due|effective)\b",
+    re.IGNORECASE,
+)
+
 
 def _clean_amounts(amounts_df: pd.DataFrame) -> pd.DataFrame:
     mask = amounts_df["Value"].apply(
@@ -94,16 +94,14 @@ def _clean_amounts(amounts_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _clean_dates(dates_df: pd.DataFrame) -> pd.DataFrame:
-    mask = ~dates_df["Value"].str.strip().apply(lambda v: bool(_FALSE_DATE_PATTERNS.match(v)))
+    mask = ~dates_df["Value"].str.strip().apply(
+        lambda v: bool(_FALSE_DATE_PATTERNS.match(v))
+    )
     return dates_df[mask].reset_index(drop=True)
 
 
 def _key_dates(dates_df: pd.DataFrame) -> pd.DataFrame:
-    obligation = re.compile(
-        r"\b(shall|must|no later than|prior to|by|before|within|deadline|due|effective)\b",
-        re.IGNORECASE,
-    )
-    mask = dates_df["Context"].apply(lambda c: bool(obligation.search(c)))
+    mask = dates_df["Context"].apply(lambda c: bool(_OBLIGATION.search(c)))
     return dates_df[mask].reset_index(drop=True)
 
 
@@ -124,10 +122,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
-file_bytes = st.session_state.get("p1_file_bytes")
-if not file_bytes:
-    st.info("Upload a document on Page 1 to get started.")
-    st.stop()
+file_bytes = require_document()
 
 doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
 paragraphs = tuple(p.strip() for p in doc_paragraphs.paragraphs if p and p.strip())
@@ -167,11 +162,19 @@ with tab_defs:
 
 with tab_dates:
     with st.spinner("Extracting dates…"):
-        dates_df = _clean_dates(_extract_entities(paragraphs, ("DATE",)).drop(columns="Type", errors="ignore"))
+        dates_df = _clean_dates(
+            _extract_entities(paragraphs, ("DATE",)).drop(
+                columns="Type", errors="ignore"
+            )
+        )
     if dates_df.empty:
         st.info("No dates found.")
     else:
-        show_key_only = st.toggle("Key dates only", value=False, help="Show only dates with obligation language (shall, must, by, no later than…)")
+        show_key_only = st.toggle(
+            "Key dates only",
+            value=False,
+            help="Show only dates with obligation language (shall, must, by, no later than…)",
+        )
         display_df = _key_dates(dates_df) if show_key_only else dates_df
         st.caption(f"{len(display_df)} dates")
         st.dataframe(
@@ -189,7 +192,9 @@ with tab_dates:
 
 with tab_parties:
     with st.spinner("Extracting parties and entities…"):
-        parties_df = _extract_entities(paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"))
+        parties_df = _extract_entities(
+            paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT")
+        )
     if parties_df.empty:
         st.info("No parties or entities found.")
     else:
@@ -203,10 +208,14 @@ with tab_parties:
             label_visibility="collapsed",
             selection_mode="single",
         )
-        display_df = parties_df[parties_df["Type"] == type_filter] if type_filter else parties_df
+        display_df = (
+            parties_df[parties_df["Type"] == type_filter] if type_filter else parties_df
+        )
         dedup = st.toggle("Unique only", value=False, key="dt_parties_dedup")
         if dedup:
-            table_df = display_df.drop_duplicates(subset="Value")[["Value", "Type"]].reset_index(drop=True)
+            table_df = display_df.drop_duplicates(subset="Value")[
+                ["Value", "Type"]
+            ].reset_index(drop=True)
             st.caption(f"{len(table_df)} unique entities")
             st.dataframe(
                 table_df,
@@ -235,7 +244,11 @@ with tab_parties:
 
 with tab_amounts:
     with st.spinner("Extracting amounts…"):
-        amounts_df = _clean_amounts(_extract_entities(paragraphs, ("MONEY", "PERCENT", "QUANTITY", "CARDINAL")).drop(columns="Type", errors="ignore"))
+        amounts_df = _clean_amounts(
+            _extract_entities(
+                paragraphs, ("MONEY", "PERCENT", "QUANTITY", "CARDINAL")
+            ).drop(columns="Type", errors="ignore")
+        )
     if amounts_df.empty:
         st.info("No monetary amounts found.")
     else:

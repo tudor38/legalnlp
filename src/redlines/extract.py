@@ -24,57 +24,28 @@ import io
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, fields
-from enum import Enum, auto
 from pathlib import Path
 from typing import Literal, Optional
 
-import spacy
-
-nlp = spacy.blank("en")
-nlp.add_pipe("sentencizer")
-
-
-# ---------------------------------------------------------------------------
-# Namespaces
-# ---------------------------------------------------------------------------
-W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
-W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
-
-
-def _tag(ns: str, local: str) -> str:
-    return f"{{{ns}}}{local}"
+from src.shared import (
+    W,
+    W14,
+    W15,
+    _tag,
+    Span,
+    SentenceSpan,
+    WordVersion,
+    detect_version,
+    DocxParseError,
+    _find_sentences_containing,
+    _build_parent_map,
+    _in_move_from,
+)
 
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
-class WordVersion(Enum):
-    LEGACY = auto()
-    EXTENDED = auto()
-    MODERN = auto()
-
-
-@dataclass
-class Span:
-    """A [start, end) character range, paragraph-relative."""
-
-    start: int
-    end: int
-
-    def __len__(self) -> int:
-        return self.end - self.start
-
-    def overlaps(self, other: "Span") -> bool:
-        return self.start < other.end and self.end > other.start
-
-
-@dataclass
-class SentenceSpan:
-    """A sentence and its paragraph-relative character span."""
-
-    text: str
-    span: Span
 
 
 @dataclass
@@ -161,37 +132,6 @@ class Move:
         }
 
 
-# ---------------------------------------------------------------------------
-# Version detection
-# ---------------------------------------------------------------------------
-def detect_version(zip_names: list[str]) -> WordVersion:
-    has_extended = "word/commentsExtended.xml" in zip_names
-    has_ids = "word/commentsIds.xml" in zip_names
-    if has_extended and has_ids:
-        return WordVersion.MODERN
-    if has_extended:
-        return WordVersion.EXTENDED
-    return WordVersion.LEGACY
-
-
-# ---------------------------------------------------------------------------
-# Parent map helpers
-# ---------------------------------------------------------------------------
-def _build_parent_map(root: ET.Element) -> dict[ET.Element, ET.Element]:
-    return {child: parent for parent in root.iter() for child in parent}
-
-
-def _in_move_from(elem: ET.Element, parent_map: dict) -> bool:
-    current = elem
-    while current in parent_map:
-        current = parent_map[current]
-        if current.tag == _tag(W, "moveFrom"):
-            return True
-        if current.tag == _tag(W, "moveTo"):
-            return False
-    return False
-
-
 def _nearest_move_ancestor(elem: ET.Element, parent_map: dict) -> Optional[ET.Element]:
     """Return the nearest <w:moveFrom> or <w:moveTo> ancestor, or None."""
     current = elem
@@ -200,25 +140,6 @@ def _nearest_move_ancestor(elem: ET.Element, parent_map: dict) -> Optional[ET.El
         if current.tag in (_tag(W, "moveFrom"), _tag(W, "moveTo")):
             return current
     return None
-
-
-# ---------------------------------------------------------------------------
-# Sentence helper
-# ---------------------------------------------------------------------------
-def _find_sentences_containing(
-    text: str, sel_start: int, sel_end: int
-) -> list[SentenceSpan]:
-    if not text or sel_start >= sel_end:
-        return []
-    doc = nlp(text)
-    return [
-        SentenceSpan(
-            text=sent.text.strip(),
-            span=Span(sent.start_char, sent.end_char),
-        )
-        for sent in doc.sents
-        if sent.start_char < sel_end and sent.end_char > sel_start
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -431,17 +352,23 @@ def extract_redlines(docx: DocxSource) -> tuple[list[Redline], WordVersion]:
     Extract all tracked insertions and deletions from a .docx file.
     para_idx values index into DocumentParagraphs.paragraphs.
     """
-    with zipfile.ZipFile(docx) as z:
-        names = z.namelist()
-        version = detect_version(names)
-        document_bytes = (
-            z.read("word/document.xml") if "word/document.xml" in names else b""
-        )
+    try:
+        with zipfile.ZipFile(docx) as z:
+            names = z.namelist()
+            version = detect_version(names)
+            document_bytes = (
+                z.read("word/document.xml") if "word/document.xml" in names else b""
+            )
+    except zipfile.BadZipFile as e:
+        raise DocxParseError("Not a valid Word document (.docx).") from e
 
     if not document_bytes:
         return [], version
 
-    return _parse_redlines(document_bytes), version
+    try:
+        return _parse_redlines(document_bytes), version
+    except ET.ParseError as e:
+        raise DocxParseError(f"Document XML is malformed: {e}") from e
 
 
 def extract_moves(docx: DocxSource) -> tuple[list[Move], WordVersion]:
@@ -451,17 +378,23 @@ def extract_moves(docx: DocxSource) -> tuple[list[Move], WordVersion]:
     from_para_idx indexes into DocumentParagraphs.moved_from.
     to_para_idx   indexes into DocumentParagraphs.paragraphs.
     """
-    with zipfile.ZipFile(docx) as z:
-        names = z.namelist()
-        version = detect_version(names)
-        document_bytes = (
-            z.read("word/document.xml") if "word/document.xml" in names else b""
-        )
+    try:
+        with zipfile.ZipFile(docx) as z:
+            names = z.namelist()
+            version = detect_version(names)
+            document_bytes = (
+                z.read("word/document.xml") if "word/document.xml" in names else b""
+            )
+    except zipfile.BadZipFile as e:
+        raise DocxParseError("Not a valid Word document (.docx).") from e
 
     if not document_bytes:
         return [], version
 
-    return _parse_moves(document_bytes), version
+    try:
+        return _parse_moves(document_bytes), version
+    except ET.ParseError as e:
+        raise DocxParseError(f"Document XML is malformed: {e}") from e
 
 
 # ---------------------------------------------------------------------------

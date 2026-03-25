@@ -1,7 +1,10 @@
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, date
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from src.comments.extract import Comment
 from src.redlines.extract import Redline, Move
@@ -63,7 +66,7 @@ def latest_date(comments: list[Comment], redlines: list[Redline]) -> datetime | 
         try:
             dates.append(datetime.fromisoformat(obj.date.rstrip("Z")))
         except ValueError:
-            pass
+            logger.warning("Skipping unparseable date %r", obj.date)
     return max(dates) if dates else None
 
 
@@ -105,7 +108,7 @@ def comment_ages_df(
                 }
             )
         except ValueError:
-            pass
+            logger.warning("Skipping comment with unparseable date %r (id=%s)", c.date, c.id)
 
     for c in comments:
         _add(c, "comment")
@@ -138,7 +141,7 @@ def redline_ages_df(
                 }
             )
         except ValueError:
-            pass
+            logger.warning("Skipping redline with unparseable date %r (id=%s)", r.date, r.id)
     return pd.DataFrame(rows)
 
 
@@ -162,7 +165,7 @@ def move_ages_df(
                 }
             )
         except ValueError:
-            pass
+            logger.warning("Skipping move with unparseable date %r (id=%s)", m.date, m.id)
     return pd.DataFrame(rows)
 
 
@@ -260,7 +263,7 @@ def comment_summary(
             if not c.resolved:
                 open_ages.append(age)
         except ValueError:
-            pass
+            logger.warning("Skipping comment with unparseable date %r (id=%s)", c.date, c.id)
 
     resolved = sum(1 for c in comments if c.resolved)
     total = len(comments)
@@ -330,7 +333,7 @@ def redline_summary(
             dates.append(dt)
             ages.append((now - dt).days)
         except ValueError:
-            pass
+            logger.warning("Skipping redline with unparseable date %r (id=%s)", r.date, r.id)
 
     return RedlineSummary(
         total=len(redlines),

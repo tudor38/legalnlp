@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.comments.extract import extract_comments, extract_paragraphs
 from src.redlines.extract import extract_redlines, extract_moves
+from src.shared import DocxParseError
 from src.stats.compute import (
     comment_ages_df,
     redline_ages_df,
@@ -22,10 +23,31 @@ from src.stats.render import (
     COMMENT_FIELDS,
     REDLINE_FIELDS,
 )
+from src.app_state import (
+    KEY_DOC_BYTES,
+    KEY_DOC_FINALIZED,
+    KEY_DOC_FINALIZED_DATE,
+    KEY_DOC_NAME,
+    KEY_COMMENT_TL_EXPAND_ALL,
+    KEY_COMMENT_TL_EXPANDED,
+    KEY_COMMENT_TL_FIELDS,
+    KEY_COMMENT_VIEW,
+    KEY_FILTER_AUTHORS,
+    KEY_FILTER_DATE_MAX,
+    KEY_FILTER_DATE_MIN,
+    KEY_REDLINE_TL_EXPAND_ALL,
+    KEY_REDLINE_TL_EXPANDED,
+    KEY_REDLINE_TL_FIELDS,
+    KEY_REDLINE_VIEW,
+    KEY_STATS_MAIN_TAB,
+    get_file_bytes,
+    set_file_bytes,
+    set_file_name,
+)
 from src.stats.config import CFG
 
-_ALLOWED_FILETYPES = CFG["display"]["allowed_filetypes"]
-_CLOSED_DATE_OFFSET = CFG["display"]["closed_date_offset_days"]
+_ALLOWED_FILETYPES = CFG.display.allowed_filetypes
+_CLOSED_DATE_OFFSET = CFG.display.closed_date_offset_days
 
 
 # ---------------------------------------------------------------------------
@@ -47,35 +69,35 @@ class RedlineViews(NamedTuple):
     timeline: str
 
 
-MAIN_TABS = MainTabs(*CFG["pages"]["page_1"]["tabs"]["main"])
-COMMENT_VIEWS = CommentViews(*CFG["pages"]["page_1"]["tabs"]["comment_views"])
-REDLINE_VIEWS = RedlineViews(*CFG["pages"]["page_1"]["tabs"]["redline_views"])
+MAIN_TABS = MainTabs(*CFG.page_1_tabs.main)
+COMMENT_VIEWS = CommentViews(*CFG.page_1_tabs.comment_views)
+REDLINE_VIEWS = RedlineViews(*CFG.page_1_tabs.redline_views)
 
 
 # ---------------------------------------------------------------------------
 # Session state — initialise permanent keys once
 # ---------------------------------------------------------------------------
 DEFAULTS: dict = {
-    "p1_is_closed": False,
-    "p1_closed_date": None,
-    "p1_file_bytes": None,
-    "p1_file_name": None,
+    KEY_DOC_FINALIZED: False,
+    KEY_DOC_FINALIZED_DATE: None,
+    KEY_DOC_BYTES: None,
+    KEY_DOC_NAME: None,
     # comment timeline
-    "p1_expanded_view": False,
-    "p1_expand_all": False,
-    "p1_show_fields": ["Resolved", "Sentence", "Comment"],
+    KEY_COMMENT_TL_EXPANDED: False,
+    KEY_COMMENT_TL_EXPAND_ALL: False,
+    KEY_COMMENT_TL_FIELDS: ["Resolved", "Sentence", "Comment"],
     # redline timeline
-    "p1_r_expanded_view": False,
-    "p1_r_expand_all": False,
-    "p1_r_show_fields": ["Redline", "Sentence"],
+    KEY_REDLINE_TL_EXPANDED: False,
+    KEY_REDLINE_TL_EXPAND_ALL: False,
+    KEY_REDLINE_TL_FIELDS: ["Redline", "Sentence"],
     # filters
-    "p1_timeline_authors": [],
-    "p1_date_min": None,
-    "p1_date_max": None,
+    KEY_FILTER_AUTHORS: [],
+    KEY_FILTER_DATE_MIN: None,
+    KEY_FILTER_DATE_MAX: None,
     # tabs
-    "p1_main_tab": MAIN_TABS.comments,
-    "p1_comment_tab": COMMENT_VIEWS.counts,
-    "p1_redline_tab": REDLINE_VIEWS.counts,
+    KEY_STATS_MAIN_TAB: MAIN_TABS.comments,
+    KEY_COMMENT_VIEW: COMMENT_VIEWS.counts,
+    KEY_REDLINE_VIEW: REDLINE_VIEWS.counts,
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -96,57 +118,57 @@ def _seed(perm_key: str) -> None:
     st.session_state[f"_{perm_key}"] = st.session_state[perm_key]
 
 
-_store_is_closed = _make_store("p1_is_closed", False)
-_store_closed_date = _make_store("p1_closed_date", None)
-_store_expanded_view = _make_store("p1_expanded_view", False)
-_store_expand_all = _make_store("p1_expand_all", False)
-_store_show_fields = _make_store("p1_show_fields", [])
-_store_r_expanded_view = _make_store("p1_r_expanded_view", False)
-_store_r_expand_all = _make_store("p1_r_expand_all", False)
-_store_r_show_fields = _make_store("p1_r_show_fields", [])
-_store_timeline_authors = _make_store("p1_timeline_authors", [])
-_store_main_tab = _make_store("p1_main_tab", MAIN_TABS.comments)
-_store_comment_tab = _make_store("p1_comment_tab", COMMENT_VIEWS.counts)
-_store_redline_tab = _make_store("p1_redline_tab", REDLINE_VIEWS.counts)
+_store_is_closed = _make_store(KEY_DOC_FINALIZED, False)
+_store_closed_date = _make_store(KEY_DOC_FINALIZED_DATE, None)
+_store_expanded_view = _make_store(KEY_COMMENT_TL_EXPANDED, False)
+_store_expand_all = _make_store(KEY_COMMENT_TL_EXPAND_ALL, False)
+_store_show_fields = _make_store(KEY_COMMENT_TL_FIELDS, [])
+_store_r_expanded_view = _make_store(KEY_REDLINE_TL_EXPANDED, False)
+_store_r_expand_all = _make_store(KEY_REDLINE_TL_EXPAND_ALL, False)
+_store_r_show_fields = _make_store(KEY_REDLINE_TL_FIELDS, [])
+_store_timeline_authors = _make_store(KEY_FILTER_AUTHORS, [])
+_store_main_tab = _make_store(KEY_STATS_MAIN_TAB, MAIN_TABS.comments)
+_store_comment_tab = _make_store(KEY_COMMENT_VIEW, COMMENT_VIEWS.counts)
+_store_redline_tab = _make_store(KEY_REDLINE_VIEW, REDLINE_VIEWS.counts)
 
 
 def _store_date_range():
-    val = st.session_state.get("_p1_date_range")
+    val = st.session_state.get("_filter_date_range")
     if val:
-        st.session_state["p1_date_min"] = val[0]
-        st.session_state["p1_date_max"] = val[1]
+        st.session_state[KEY_FILTER_DATE_MIN] = val[0]
+        st.session_state[KEY_FILTER_DATE_MAX] = val[1]
 
 
 def _store_uploaded_file():
-    f = st.session_state.get("_p1_uploaded_file")
+    f = st.session_state.get("_doc_upload")
     if f is not None:
         st.cache_data.clear()
-        st.session_state["p1_file_bytes"] = f.read()
-        st.session_state["p1_file_name"] = f.name
+        set_file_bytes(f.read())
+        set_file_name(f.name)
         for key, val in DEFAULTS.items():
-            if key not in ("p1_file_bytes", "p1_file_name"):
+            if key not in (KEY_DOC_BYTES, KEY_DOC_NAME):
                 st.session_state[key] = val
         for widget_key in (
-            "_p1_date_range",
-            "_p1_timeline_authors",
-            "_p1_is_closed",
-            "_p1_closed_date",
-            "_p1_main_tab",
-            "_p1_comment_tab",
-            "_p1_redline_tab",
-            "_p1_expanded_view",
-            "_p1_expand_all",
-            "_p1_show_fields",
-            "_p1_r_expanded_view",
-            "_p1_r_expand_all",
-            "_p1_r_show_fields",
+            "_filter_date_range",
+            "_filter_authors",
+            "_doc_finalized",
+            "_doc_finalized_date",
+            "_stats_main_tab",
+            "_comment_view",
+            "_redline_view",
+            "_comment_tl_expanded",
+            "_comment_tl_expand_all",
+            "_comment_tl_fields",
+            "_redline_tl_expanded",
+            "_redline_tl_expand_all",
+            "_redline_tl_fields",
         ):
             if widget_key in st.session_state:
                 del st.session_state[widget_key]
         f.seek(0)
     else:
-        st.session_state["p1_file_bytes"] = None
-        st.session_state["p1_file_name"] = None
+        set_file_bytes(None)
+        set_file_name(None)
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +189,10 @@ def _sidebar_controls(
     comments, redlines, all_dfs: list[pd.DataFrame]
 ) -> tuple[datetime, bool, tuple, list[str]]:
     st.sidebar.markdown("### Document")
-    _seed("p1_is_closed")
+    _seed(KEY_DOC_FINALIZED)
     is_closed = st.sidebar.toggle(
         "Matter is closed",
-        key="_p1_is_closed",
+        key="_doc_finalized",
         on_change=_store_is_closed,
         help="Toggle ON if the document is part of a closed matter. This setting affects date calculations.",
     )
@@ -178,11 +200,11 @@ def _sidebar_controls(
     if is_closed:
         ld = latest_date(comments, redlines)
         default = ld.date() if ld else datetime.today().date()
-        saved = st.session_state["p1_closed_date"]
-        st.session_state["_p1_closed_date"] = saved if saved is not None else default
+        saved = st.session_state[KEY_DOC_FINALIZED_DATE]
+        st.session_state["_doc_finalized_date"] = saved if saved is not None else default
         closed_date = st.sidebar.date_input(
             "Closed date",
-            key="_p1_closed_date",
+            key="_doc_finalized_date",
             on_change=_store_closed_date,
         )
         reference_date = datetime.combine(closed_date, datetime.min.time()) + timedelta(
@@ -209,29 +231,29 @@ def _sidebar_controls(
         else datetime.now().date()
     )
 
-    saved_min = max(st.session_state["p1_date_min"] or global_date_min, global_date_min)
-    saved_max = min(st.session_state["p1_date_max"] or global_date_max, global_date_max)
+    saved_min = max(st.session_state[KEY_FILTER_DATE_MIN] or global_date_min, global_date_min)
+    saved_max = min(st.session_state[KEY_FILTER_DATE_MAX] or global_date_max, global_date_max)
 
     date_range = st.sidebar.slider(
         "Date range",
         min_value=global_date_min,
         max_value=global_date_max,
         value=(saved_min, saved_max),
-        key="_p1_date_range",
+        key="_filter_date_range",
         on_change=_store_date_range,
     )
 
     c_df = all_dfs[0]
     if not c_df.empty:
         all_authors = sorted(c_df["author"].unique().tolist())
-        st.session_state["_p1_timeline_authors"] = (
-            st.session_state["p1_timeline_authors"] or all_authors
+        st.session_state["_filter_authors"] = (
+            st.session_state[KEY_FILTER_AUTHORS] or all_authors
         )
         selected_authors = (
             st.sidebar.multiselect(
                 "Comment authors",
                 options=all_authors,
-                key="_p1_timeline_authors",
+                key="_filter_authors",
                 on_change=_store_timeline_authors,
             )
             or all_authors
@@ -249,7 +271,7 @@ def _render_comment_timeline(
     filtered_c_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in ("p1_expanded_view", "p1_expand_all", "p1_show_fields"):
+    for key in (KEY_COMMENT_TL_EXPANDED, KEY_COMMENT_TL_EXPAND_ALL, KEY_COMMENT_TL_FIELDS):
         _seed(key)
     render_timeline(
         filtered_c_df,
@@ -267,9 +289,9 @@ def _render_comment_timeline(
         ],
         default_fields=["Resolved", "Sentence", "Comment"],
         all_authors=all_authors,
-        expanded_view_key="_p1_expanded_view",
-        expand_all_key="_p1_expand_all",
-        show_fields_key="_p1_show_fields",
+        expanded_view_key="_comment_tl_expanded",
+        expand_all_key="_comment_tl_expand_all",
+        show_fields_key="_comment_tl_fields",
         on_expanded_view=_store_expanded_view,
         on_expand_all=_store_expand_all,
         on_show_fields=_store_show_fields,
@@ -280,7 +302,7 @@ def _render_redline_timeline(
     filtered_r_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in ("p1_r_expanded_view", "p1_r_expand_all", "p1_r_show_fields"):
+    for key in (KEY_REDLINE_TL_EXPANDED, KEY_REDLINE_TL_EXPAND_ALL, KEY_REDLINE_TL_FIELDS):
         _seed(key)
     render_timeline(
         filtered_r_df,
@@ -289,9 +311,9 @@ def _render_redline_timeline(
         display_cols=["author", "date", "kind", "text", "sentence", "paragraph"],
         default_fields=["Redline", "Sentence"],
         all_authors=all_authors,
-        expanded_view_key="_p1_r_expanded_view",
-        expand_all_key="_p1_r_expand_all",
-        show_fields_key="_p1_r_show_fields",
+        expanded_view_key="_redline_tl_expanded",
+        expand_all_key="_redline_tl_expand_all",
+        show_fields_key="_redline_tl_fields",
         on_expanded_view=_store_r_expanded_view,
         on_expand_all=_store_r_expand_all,
         on_show_fields=_store_r_show_fields,
@@ -308,11 +330,11 @@ def _render_comments(
     render_date_caption(filtered_c_df, reference_date, is_closed)
     render_comment_metrics(comment_metrics(comments))
 
-    _seed("p1_comment_tab")
+    _seed(KEY_COMMENT_VIEW)
     comment_tab = st.pills(
         "View",
         list(COMMENT_VIEWS),
-        key="_p1_comment_tab",
+        key="_comment_view",
         on_change=_store_comment_tab,
         selection_mode="single",
         label_visibility="collapsed",
@@ -355,11 +377,11 @@ def _render_redlines(
         border=True,
     )
 
-    _seed("p1_redline_tab")
+    _seed(KEY_REDLINE_VIEW)
     redline_tab = st.pills(
         "View",
         list(REDLINE_VIEWS),
-        key="_p1_redline_tab",
+        key="_redline_view",
         on_change=_store_redline_tab,
         selection_mode="single",
         label_visibility="collapsed",
@@ -396,14 +418,18 @@ def _render_moves(
 st.sidebar.file_uploader(
     "Choose a file",
     type=_ALLOWED_FILETYPES,
-    key="_p1_uploaded_file",
+    key="_doc_upload",
     on_change=_store_uploaded_file,
 )
 
-file_bytes = st.session_state["p1_file_bytes"]
+file_bytes = get_file_bytes()
 
 if file_bytes:
-    comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
+    try:
+        comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
+    except DocxParseError as e:
+        st.error(f"Could not read the uploaded file: {e}")
+        st.stop()
 
     c_df = comment_ages_df(comments, datetime.now())
     r_df = redline_ages_df(redlines, datetime.now())
@@ -424,17 +450,23 @@ if file_bytes:
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
     if selected_authors:
         if not filtered_c_df.empty:
-            filtered_c_df = filtered_c_df[filtered_c_df["author"].isin(selected_authors)].reset_index(drop=True)
+            filtered_c_df = filtered_c_df[
+                filtered_c_df["author"].isin(selected_authors)
+            ].reset_index(drop=True)
         if not filtered_r_df.empty:
-            filtered_r_df = filtered_r_df[filtered_r_df["author"].isin(selected_authors)].reset_index(drop=True)
+            filtered_r_df = filtered_r_df[
+                filtered_r_df["author"].isin(selected_authors)
+            ].reset_index(drop=True)
         if not filtered_m_df.empty:
-            filtered_m_df = filtered_m_df[filtered_m_df["author"].isin(selected_authors)].reset_index(drop=True)
+            filtered_m_df = filtered_m_df[
+                filtered_m_df["author"].isin(selected_authors)
+            ].reset_index(drop=True)
 
-    _seed("p1_main_tab")
+    _seed(KEY_STATS_MAIN_TAB)
     main_tab = st.pills(
         "Section",
         list(MAIN_TABS),
-        key="_p1_main_tab",
+        key="_stats_main_tab",
         on_change=_store_main_tab,
         selection_mode="single",
         label_visibility="collapsed",
