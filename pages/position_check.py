@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from src.app_state import MODEL_DEBERTA_BASE, MODEL_DEBERTA_SMALL
 from src.comments.extract import extract_paragraphs
 from src.nlp.entailment import (
     LABEL_DISPLAY as _LABEL_DISPLAY,
@@ -31,10 +32,7 @@ if not docs:
 st.sidebar.markdown("### Model")
 model_name = st.sidebar.selectbox(
     "NLI model",
-    options=[
-        "cross-encoder/nli-deberta-v3-base",
-        "cross-encoder/nli-deberta-v3-small",
-    ],
+    options=[MODEL_DEBERTA_BASE, MODEL_DEBERTA_SMALL],
     index=0,
     help="Larger model is more accurate but slower.",
 )
@@ -104,7 +102,7 @@ st.dataframe(
     width="stretch",
     hide_index=True,
     column_config={
-        "idx": st.column_config.NumberColumn("#", width="small"),
+        "idx": st.column_config.NumberColumn("Para", width="small"),
         "passage": st.column_config.TextColumn("Passage", width="large"),
         "label": st.column_config.TextColumn("Label", width="small"),
         "score": st.column_config.NumberColumn(

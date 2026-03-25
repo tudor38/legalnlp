@@ -22,7 +22,7 @@ import streamlit as st
 from sentence_transformers import CrossEncoder, SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 
-from src.app_state import KEY_ASSESSED_ISSUES
+from src.app_state import KEY_ASSESSED_ISSUES, MODEL_DEBERTA_BASE, MODEL_DEBERTA_SMALL, MODEL_MINILM
 from src.comments.extract import Comment, extract_comments, extract_paragraphs
 from src.nlp.entailment import contentiousness_score, template_score
 from src.stats.render import AUTHOR_PALETTE
@@ -289,7 +289,7 @@ def _assess_issue(
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def _embed_threads(texts: tuple[str, ...]) -> np.ndarray:
-    return get_sentence_transformer("all-MiniLM-L6-v2").encode(
+    return get_sentence_transformer(MODEL_MINILM).encode(
         list(texts), show_progress_bar=False, normalize_embeddings=True
     )
 
@@ -454,7 +454,7 @@ top_level = [c for c in all_comments if not c.parent_id]
 st.sidebar.markdown("### Settings")
 nli_model_name = st.sidebar.selectbox(
     "NLI model",
-    ["cross-encoder/nli-deberta-v3-small", "cross-encoder/nli-deberta-v3-base"],
+    [MODEL_DEBERTA_SMALL, MODEL_DEBERTA_BASE],
     index=0,
     help="Small is faster; base is more accurate.",
 )
