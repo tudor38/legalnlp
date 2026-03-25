@@ -8,6 +8,19 @@ from collections.abc import Sequence
 
 import numpy as np
 
+TOPIC_PALETTE = [
+    "#ffe066",
+    "#b5ead7",
+    "#b5d5ff",
+    "#e8b5ff",
+    "#ffb5b5",
+    "#ffd9b5",
+    "#b5ffe4",
+    "#c9ffb5",
+    "#ffb5e8",
+    "#b5f0ff",
+]
+
 
 def tokenize(text: str) -> list[str]:
     return re.findall(r"\b\w+\b", text.lower())
@@ -44,4 +57,7 @@ def bm25_scores(
             freq = tf[term]
             denom = freq + k1 * (1 - b + b * dl / max(avgdl, 1.0))
             scores[idx] += idf * (freq * (k1 + 1)) / max(denom, 1e-9)
+    max_score = scores.max()
+    if max_score > 0:
+        scores /= max_score
     return scores
