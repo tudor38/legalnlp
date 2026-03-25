@@ -23,6 +23,9 @@ def get_spacy_nlp(model_name: str = "en_core_web_sm"):
         return spacy.load(model_name)
     except OSError:
         raise RuntimeError(
-            f"spaCy model '{model_name}' is not installed. "
-            f"Run: python -m spacy download {model_name}"
+            f"spaCy model '{model_name}' is not installed."
+        ) from None
+    except ValueError as exc:
+        raise RuntimeError(
+            f"spaCy model '{model_name}' is missing a required component: {exc}"
         ) from None

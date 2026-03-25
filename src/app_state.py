@@ -69,6 +69,9 @@ KEY_TOPIC_SEMANTIC_MIN = "topic_semantic_min"
 # Issues overview page
 KEY_ASSESSED_ISSUES = "assessed_issues"
 
+# Relationship graph page
+KEY_GRAPH_DATA = "graph_data"
+
 # ---------------------------------------------------------------------------
 # Cross-page typed accessors
 # ---------------------------------------------------------------------------

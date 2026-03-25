@@ -53,6 +53,11 @@ position_check = st.Page(
 issues_overview = st.Page(
     "pages/issues_overview.py", title="Issues Overview", icon=":material/gavel:"
 )
+relationship_graph = st.Page(
+    "pages/relationship_graph.py",
+    title="Relationship Graph",
+    icon=":material/account_tree:",
+)
 search = st.Page("pages/search.py", title="Search", icon=":material/search:")
 
 pg = st.navigation(
@@ -62,6 +67,7 @@ pg = st.navigation(
         topic_exploration,
         position_check,
         issues_overview,
+        relationship_graph,
         search,
     ]
 )

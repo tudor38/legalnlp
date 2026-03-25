@@ -482,7 +482,7 @@ if not working:
 open_count = sum(1 for c in top_level if not c.resolved)
 resolved_count = len(top_level) - open_count
 st.caption(
-    f"{len(top_level)} comment threads · {open_count} open · {resolved_count} resolved · analysing {len(working)}"
+    f"{len(top_level)} comment threads · {open_count} open · {resolved_count} resolved · analyzing {len(working)}"
 )
 
 if st.button("Generate Report", type="primary"):

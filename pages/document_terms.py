@@ -66,6 +66,8 @@ _FALSE_DATE_PATTERNS = re.compile(
     r"|\d{1,3}-\d+-[a-zA-Z]"  # "23-1202(c)"
     r"|§\s*\d+"  # "§ 23"
     r"|\d+\([a-zA-Z]\)"  # "4(b)"
+    r"|\d+\)\s*(years?|months?|days?|weeks?|hours?)"  # "30) days", "2) years" (spaCy picks up the tail of parenthetical numbers)
+    r"|\d+\s+(years?|months?|days?|weeks?|hours?)$"   # "30 days", "12 months" — plain durations, not calendar dates
     r")"
 )
 
@@ -87,9 +89,7 @@ _OBLIGATION = re.compile(
 
 
 def _clean_amounts(amounts_df: pd.DataFrame) -> pd.DataFrame:
-    mask = amounts_df["Value"].apply(
-        lambda v: bool(_NUMERIC_PATTERN.search(v)) and not bool(_SECTION_REF.search(v))
-    )
+    mask = ~amounts_df["Value"].apply(lambda v: bool(_SECTION_REF.search(v)))
     return amounts_df[mask].reset_index(drop=True)
 
 
@@ -110,7 +110,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
     for _, row in df.iterrows():
         term = row[heading_col]
         context = re.sub(
-            re.escape(term),
+            r"\b" + re.escape(term) + r"\b",
             lambda m: f"<mark>{m.group(0)}</mark>",
             row["Context"],
             flags=re.IGNORECASE,
