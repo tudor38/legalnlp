@@ -207,7 +207,11 @@ elif method == "Regex":
 elif method == "Relevance":
     scores = bm25_scores(texts, q)
     ranked = np.argsort(-scores)
-    hits = [(int(i), float(scores[i])) for i in ranked if scores[i] >= min_score and scores[i] > 0][:max_results]
+    all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
+    hits = [(i, s) for i, s in all_positive if s >= min_score][:max_results]
+    if not hits and all_positive:
+        st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+        st.stop()
 
 else:  # Semantic
     with st.spinner("Embedding…"):
@@ -216,7 +220,11 @@ else:  # Semantic
         q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
     sims = corpus_embs @ q_emb
     ranked = np.argsort(-sims)
-    hits = [(int(i), float(sims[i])) for i in ranked if sims[i] >= min_score][:max_results]
+    all_ranked = [(int(i), float(sims[i])) for i in ranked]
+    hits = [(i, s) for i, s in all_ranked if s >= min_score][:max_results]
+    if not hits and any(s > 0 for _, s in all_ranked):
+        st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+        st.stop()
 
 if not hits:
     st.info("No matches found.")

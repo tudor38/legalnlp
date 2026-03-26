@@ -189,6 +189,11 @@ st.markdown(
 _cache_key = hashlib.md5(file_bytes).hexdigest() + "|" + spacy_model
 
 if st.session_state.get("_doc_terms_key") != _cache_key:
+    defs_df = pd.DataFrame()
+    dates_df = pd.DataFrame()
+    parties_df = pd.DataFrame()
+    money_df = pd.DataFrame()
+    numbers_df = pd.DataFrame()
     try:
         with st.spinner("Extracting document terms…"):
             defs_df = _extract_definitions(paragraphs)

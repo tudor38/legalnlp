@@ -12,7 +12,9 @@ No external API calls — everything runs with the models already loaded by the 
 
 import html
 import io
+import tomllib
 from collections import defaultdict
+from pathlib import Path
 from textwrap import shorten
 
 from src.utils.page import require_document
@@ -30,69 +32,21 @@ from src.utils.models import get_cross_encoder, get_sentence_transformer, get_sp
 
 
 # ---------------------------------------------------------------------------
-# Risk templates  (NLI hypotheses evaluated against clause text)
+# Config — templates and keywords loaded from config/issues.toml
 # ---------------------------------------------------------------------------
-_HIGH_TEMPLATES = [
-    "The liability under this agreement is unlimited or uncapped.",
-    "Consequential, indirect, or punitive damages are not excluded.",
-    "This agreement can be terminated at any time without cause.",
-    "Intellectual property rights are assigned permanently and irrevocably.",
-    "The indemnification obligation covers all losses without limitation.",
-    "There is no cap on the total amount of damages recoverable.",
-]
+_ISSUES_CFG_PATH = Path(__file__).parent.parent / "config" / "issues.toml"
+with open(_ISSUES_CFG_PATH, "rb") as _f:
+    _issues_cfg = tomllib.load(_f)
 
-_MEDIUM_TEMPLATES = [
-    "There is a specified cap or ceiling on liability.",
-    "Confidentiality obligations extend beyond the term of the agreement.",
-    "Assignment of rights requires prior written consent.",
-    "A defined notice period is required before termination.",
-    "Exclusivity provisions restrict the party's ability to work with others.",
-]
-
-_LOW_TEMPLATES = [
-    "This provision is a standard administrative or procedural matter.",
-    "This clause provides a minor clarification with no material impact.",
-    "This is a boilerplate definition with no financial consequence.",
-]
+_HIGH_TEMPLATES:   list[str] = _issues_cfg["templates"]["high"]
+_MEDIUM_TEMPLATES: list[str] = _issues_cfg["templates"]["medium"]
+_LOW_TEMPLATES:    list[str] = _issues_cfg["templates"]["low"]
+_ACCEPTING_KW: set[str] = set(_issues_cfg["keywords"]["accepting"])
+_PUSHING_KW:   set[str] = set(_issues_cfg["keywords"]["pushing"])
 
 _RISK_ORDER = {"high": 0, "medium": 1, "low": 2}
 _RISK_COLOR = {"high": "#8b3535", "medium": "#7a5a20", "low": "#2e6b42"}
 _RISK_LABEL = {"high": "High", "medium": "Medium", "low": "Low"}
-
-
-_ACCEPTING_KW = {
-    "agree",
-    "agreed",
-    "accept",
-    "accepted",
-    "approved",
-    "approve",
-    "ok",
-    "fine",
-    "no objection",
-    "looks good",
-    "confirmed",
-}
-_PUSHING_KW = {
-    "propose",
-    "suggested",
-    "suggest",
-    "reject",
-    "rejected",
-    "object",
-    "disagree",
-    "revise",
-    "revised",
-    "delete",
-    "remove",
-    "change",
-    "modify",
-    "alternative",
-    "instead",
-    "replace",
-    "amend",
-    "redline",
-}
 
 
 # ---------------------------------------------------------------------------

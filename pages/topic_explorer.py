@@ -276,7 +276,10 @@ else:
 
 if len(docs) < 12:
     st.warning(
-        "Not enough text after filtering. Lower 'Minimum text length' or use a longer document."
+        f"Only {len(docs)} passage{'s' if len(docs) != 1 else ''} remain after filtering "
+        f"(minimum 12 required). "
+        f"Try lowering **Minimum text length** (currently {min_chars} chars) "
+        f"or switching the analysis unit to **Sentence**."
     )
     st.stop()
 
@@ -398,21 +401,26 @@ with st.sidebar.expander("Seed words (advanced)", expanded=False):
 seed_topic_list: tuple[tuple[str, ...], ...] | None = None
 if seed_words_raw and seed_words_raw.strip():
     parsed = tuple(
-        tuple(w.strip() for w in line.split(",") if w.strip())
+        tuple(w.strip() for w in line.split(",") if len(w.strip()) > 1)
         for line in seed_words_raw.strip().splitlines()
         if line.strip()
     )
+    parsed = tuple(group for group in parsed if group)
     if parsed:
         seed_topic_list = parsed
+    else:
+        st.sidebar.warning("Seed words ignored — no valid words found (each word must be at least 2 characters).")
 
-_topic_state_key = "|".join([
-    hashlib.md5(file_bytes).hexdigest(),
-    str(analysis_unit),
-    str(min_chars),
-    embedding_model_name,
-    str(granularity_sizes),
-    (seed_words_raw or "").strip(),
-])
+_topic_state_key = hashlib.md5(
+    repr({
+        "doc": hashlib.md5(file_bytes).hexdigest(),
+        "unit": analysis_unit,
+        "min_chars": min_chars,
+        "model": embedding_model_name,
+        "granularity": granularity_sizes,
+        "seeds": (seed_words_raw or "").strip(),
+    }).encode()
+).hexdigest()
 
 if st.session_state.get("_topic_state_key") != _topic_state_key:
     with st.spinner("Embedding and modeling topics..."):

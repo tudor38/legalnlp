@@ -134,22 +134,42 @@ def _seed(perm_key: str) -> None:
     st.session_state[f"_{perm_key}"] = st.session_state[perm_key]
 
 
-_store_is_closed = _make_store(KEY_DOC_FINALIZED, False)
-_store_closed_date = _make_store(KEY_DOC_FINALIZED_DATE, None)
-_store_expanded_view = _make_store(KEY_COMMENT_TL_EXPANDED, False)
-_store_expand_all = _make_store(KEY_COMMENT_TL_EXPAND_ALL, False)
-_store_show_fields = _make_store(KEY_COMMENT_TL_FIELDS, [])
-_store_r_expanded_view = _make_store(KEY_REDLINE_TL_EXPANDED, False)
-_store_r_expand_all = _make_store(KEY_REDLINE_TL_EXPAND_ALL, False)
-_store_r_show_fields = _make_store(KEY_REDLINE_TL_FIELDS, [])
-_store_m_expanded_view = _make_store(KEY_MOVE_TL_EXPANDED, False)
-_store_m_expand_all = _make_store(KEY_MOVE_TL_EXPAND_ALL, False)
-_store_m_show_fields = _make_store(KEY_MOVE_TL_FIELDS, [])
-_store_timeline_authors = _make_store(KEY_FILTER_AUTHORS, [])
-_store_main_tab = _make_store(KEY_STATS_MAIN_TAB, MAIN_TABS.comments)
-_store_comment_tab = _make_store(KEY_COMMENT_VIEW, COMMENT_VIEWS.counts)
-_store_redline_tab = _make_store(KEY_REDLINE_VIEW, REDLINE_VIEWS.counts)
-_store_move_tab = _make_store(KEY_MOVE_VIEW, MOVE_VIEWS.counts)
+_CB: dict[str, tuple[str, object]] = {
+    "is_closed":        (KEY_DOC_FINALIZED,        False),
+    "closed_date":      (KEY_DOC_FINALIZED_DATE,   None),
+    "expanded_view":    (KEY_COMMENT_TL_EXPANDED,  False),
+    "expand_all":       (KEY_COMMENT_TL_EXPAND_ALL, False),
+    "show_fields":      (KEY_COMMENT_TL_FIELDS,    []),
+    "r_expanded_view":  (KEY_REDLINE_TL_EXPANDED,  False),
+    "r_expand_all":     (KEY_REDLINE_TL_EXPAND_ALL, False),
+    "r_show_fields":    (KEY_REDLINE_TL_FIELDS,    []),
+    "m_expanded_view":  (KEY_MOVE_TL_EXPANDED,     False),
+    "m_expand_all":     (KEY_MOVE_TL_EXPAND_ALL,   False),
+    "m_show_fields":    (KEY_MOVE_TL_FIELDS,       []),
+    "timeline_authors": (KEY_FILTER_AUTHORS,        []),
+    "main_tab":         (KEY_STATS_MAIN_TAB,        MAIN_TABS.comments),
+    "comment_tab":      (KEY_COMMENT_VIEW,          COMMENT_VIEWS.counts),
+    "redline_tab":      (KEY_REDLINE_VIEW,          REDLINE_VIEWS.counts),
+    "move_tab":         (KEY_MOVE_VIEW,             MOVE_VIEWS.counts),
+}
+_stores = {name: _make_store(key, default) for name, (key, default) in _CB.items()}
+
+_store_is_closed       = _stores["is_closed"]
+_store_closed_date     = _stores["closed_date"]
+_store_expanded_view   = _stores["expanded_view"]
+_store_expand_all      = _stores["expand_all"]
+_store_show_fields     = _stores["show_fields"]
+_store_r_expanded_view = _stores["r_expanded_view"]
+_store_r_expand_all    = _stores["r_expand_all"]
+_store_r_show_fields   = _stores["r_show_fields"]
+_store_m_expanded_view = _stores["m_expanded_view"]
+_store_m_expand_all    = _stores["m_expand_all"]
+_store_m_show_fields   = _stores["m_show_fields"]
+_store_timeline_authors = _stores["timeline_authors"]
+_store_main_tab        = _stores["main_tab"]
+_store_comment_tab     = _stores["comment_tab"]
+_store_redline_tab     = _stores["redline_tab"]
+_store_move_tab        = _stores["move_tab"]
 
 
 def _store_date_range():
@@ -516,9 +536,10 @@ if file_bytes:
         comments, redlines, [c_df, r_df, m_df]
     )
 
-    c_df = comment_ages_df(comments, reference_date)
-    r_df = redline_ages_df(redlines, reference_date)
-    m_df = move_ages_df(moves, reference_date)
+    if is_closed:
+        c_df = comment_ages_df(comments, reference_date)
+        r_df = redline_ages_df(redlines, reference_date)
+        m_df = move_ages_df(moves, reference_date)
 
     all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
 

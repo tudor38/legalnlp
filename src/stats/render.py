@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import NamedTuple
 
+import numpy as np
+
 from src.comments.extract import Comment
 from src.stats.compute import CommentMetrics, PassageActivity
 from src.stats.config import CFG
@@ -292,8 +294,6 @@ def render_timeline(
     if df.empty:
         st.caption("No data matches the current filters.")
         return
-
-    import numpy as np
 
     rng = np.random.default_rng(42)
     df = df.copy().reset_index(drop=True)
