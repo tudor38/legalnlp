@@ -8,7 +8,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import plotly.express as px
-from src.comments.render import render_paragraph_with_highlight
+from src.comments.render import render_paragraph_with_highlight, render_paragraph_with_redline, render_paragraph_with_redline_pair
 
 # Tableau10 desaturated — consistent across Altair and Plotly
 AUTHOR_PALETTE = [
@@ -67,6 +67,13 @@ REDLINE_FIELDS: list[TimelineField] = [
     TimelineField("Redline", "Text", None),
     TimelineField("Sentence", "Sentence", "Text"),
     TimelineField("Paragraph", "Paragraph", "Text"),
+]
+
+MOVE_FIELDS: list[TimelineField] = [
+    TimelineField("Text", "Text", None),
+    TimelineField("Distance", "Distance", None),
+    TimelineField("From Para", "From_para_idx", None),
+    TimelineField("To Para", "To_para_idx", None),
 ]
 
 
@@ -395,37 +402,98 @@ def render_timeline(
     field_map = {f.label: f for f in fields}
 
     if expanded_view:
-        for _, row in display.iterrows():
+        # Pre-compute insertion/deletion pairs by same author+date
+        pair_partner: dict[int, int] = {}
+        pair_skip: set[int] = set()
+        if "Kind" in display.columns:
+            kind_set = set(display["Kind"].unique())
+            if "insertion" in kind_set and "deletion" in kind_set:
+                from collections import defaultdict
+                ins_by_key: dict[tuple, list[int]] = defaultdict(list)
+                del_by_key: dict[tuple, list[int]] = defaultdict(list)
+                for idx, r in display.iterrows():
+                    key = (r["Author"], r["Date"])
+                    if r["Kind"] == "insertion":
+                        ins_by_key[key].append(idx)
+                    elif r["Kind"] == "deletion":
+                        del_by_key[key].append(idx)
+                for key in ins_by_key:
+                    if key in del_by_key:
+                        for ins_i, del_i in zip(ins_by_key[key], del_by_key[key]):
+                            leader, follower = min(ins_i, del_i), max(ins_i, del_i)
+                            pair_partner[leader] = follower
+                            pair_skip.add(follower)
+
+        def _render_fields(row, label_list):
+            for label in label_list:
+                tf = field_map.get(label)
+                if tf is None:
+                    continue
+                col_name = tf.col
+                hl_name = tf.highlight
+                if col_name not in display.columns:
+                    continue
+                val = row[col_name]
+                if not val and val != 0:
+                    continue
+                if col_name == "Resolved":
+                    st.markdown(f"**Resolved:** {'Yes' if val else 'No'}")
+                elif hl_name and hl_name in display.columns:
+                    hl_val = row[hl_name]
+                    st.markdown(f"**{label}:**")
+                    items = val if isinstance(val, list) else [val]
+                    kind_val = row.get("Kind") if "Kind" in display.columns else None
+                    for item in items:
+                        if kind_val in ("insertion", "deletion"):
+                            render_paragraph_with_redline(item, hl_val or "", kind_val)
+                        else:
+                            render_paragraph_with_highlight(item, hl_val or "")
+                else:
+                    st.markdown(f"**{label}:** {val}")
+
+        for idx, row in display.iterrows():
             if not show_fields:
                 break
-            kind_label = f" · {row['Kind']}" if "Kind" in display.columns else ""
-            with st.expander(
-                f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all
-            ):
-                for label in show_fields:
-                    tf = field_map.get(label)
-                    if tf is None:
-                        continue
-                    col_name = tf.col
-                    hl_name = tf.highlight
+            if idx in pair_skip:
+                continue
 
-                    if col_name not in display.columns:
-                        continue
-
-                    val = row[col_name]
-                    if not val and val != 0:
-                        continue
-
-                    if col_name == "Resolved":
-                        st.markdown(f"**Resolved:** {'Yes' if val else 'No'}")
-                    elif hl_name and hl_name in display.columns:
-                        hl_val = row[hl_name]
-                        st.markdown(f"**{label}:**")
-                        items = val if isinstance(val, list) else [val]
-                        for item in items:
-                            render_paragraph_with_highlight(item, hl_val or "")
-                    else:
-                        st.markdown(f"**{label}:** {val}")
+            if idx in pair_partner:
+                partner_row = display.loc[pair_partner[idx]]
+                ins_row = row if row["Kind"] == "insertion" else partner_row
+                del_row = partner_row if row["Kind"] == "insertion" else row
+                with st.expander(
+                    f"{row['Author']} · {row['Date']} · edit", expanded=expand_all
+                ):
+                    for label in show_fields:
+                        tf = field_map.get(label)
+                        if tf is None:
+                            continue
+                        col_name = tf.col
+                        hl_name = tf.highlight
+                        if col_name not in display.columns:
+                            continue
+                        if hl_name and hl_name in display.columns:
+                            del_hl = del_row[hl_name] or ""
+                            ins_hl = ins_row[hl_name] or ""
+                            st.markdown(f"**{label}:**")
+                            items = del_row[col_name]
+                            items = items if isinstance(items, list) else [items]
+                            for item in items:
+                                render_paragraph_with_redline_pair(item, del_hl, ins_hl)
+                        else:
+                            del_val = del_row[col_name]
+                            ins_val = ins_row[col_name]
+                            if not del_val and not ins_val:
+                                continue
+                            del_span = f'<span style="color:#ef4444;text-decoration:line-through">{del_val}</span>'
+                            ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{ins_val}</span>'
+                            st.markdown(f"**{label}:** {del_span} → {ins_span}", unsafe_allow_html=True)
+            else:
+                kind_label = f" · {row['Kind']}" if "Kind" in display.columns else ""
+                with st.expander(
+                    f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all
+                ):
+                    _render_fields(row, show_fields)
     else:
         if show_fields:
             keep_cols = ["Author", "Date"]

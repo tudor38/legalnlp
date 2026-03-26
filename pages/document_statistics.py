@@ -22,6 +22,7 @@ from src.stats.render import (
     render_date_caption,
     COMMENT_FIELDS,
     REDLINE_FIELDS,
+    MOVE_FIELDS,
 )
 from src.app_state import (
     KEY_DOC_BYTES,
@@ -39,6 +40,10 @@ from src.app_state import (
     KEY_REDLINE_TL_EXPANDED,
     KEY_REDLINE_TL_FIELDS,
     KEY_REDLINE_VIEW,
+    KEY_MOVE_TL_EXPAND_ALL,
+    KEY_MOVE_TL_EXPANDED,
+    KEY_MOVE_TL_FIELDS,
+    KEY_MOVE_VIEW,
     KEY_STATS_MAIN_TAB,
     get_file_bytes,
     set_file_bytes,
@@ -69,9 +74,15 @@ class RedlineViews(NamedTuple):
     timeline: str
 
 
+class MoveViews(NamedTuple):
+    counts: str
+    timeline: str
+
+
 MAIN_TABS = MainTabs(*CFG.page_1_tabs.main)
 COMMENT_VIEWS = CommentViews(*CFG.page_1_tabs.comment_views)
 REDLINE_VIEWS = RedlineViews(*CFG.page_1_tabs.redline_views)
+MOVE_VIEWS = MoveViews(*CFG.page_1_tabs.move_views)
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +95,16 @@ DEFAULTS: dict = {
     KEY_DOC_NAME: None,
     # comment timeline
     KEY_COMMENT_TL_EXPANDED: False,
-    KEY_COMMENT_TL_EXPAND_ALL: False,
-    KEY_COMMENT_TL_FIELDS: ["Resolved", "Sentence", "Comment"],
+    KEY_COMMENT_TL_EXPAND_ALL: True,
+    KEY_COMMENT_TL_FIELDS: [f.label for f in COMMENT_FIELDS],
     # redline timeline
     KEY_REDLINE_TL_EXPANDED: False,
-    KEY_REDLINE_TL_EXPAND_ALL: False,
-    KEY_REDLINE_TL_FIELDS: ["Redline", "Sentence"],
+    KEY_REDLINE_TL_EXPAND_ALL: True,
+    KEY_REDLINE_TL_FIELDS: [f.label for f in REDLINE_FIELDS],
+    # move timeline
+    KEY_MOVE_TL_EXPANDED: False,
+    KEY_MOVE_TL_EXPAND_ALL: True,
+    KEY_MOVE_TL_FIELDS: [f.label for f in MOVE_FIELDS],
     # filters
     KEY_FILTER_AUTHORS: [],
     KEY_FILTER_DATE_MIN: None,
@@ -98,6 +113,7 @@ DEFAULTS: dict = {
     KEY_STATS_MAIN_TAB: MAIN_TABS.comments,
     KEY_COMMENT_VIEW: COMMENT_VIEWS.counts,
     KEY_REDLINE_VIEW: REDLINE_VIEWS.counts,
+    KEY_MOVE_VIEW: MOVE_VIEWS.counts,
 }
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
@@ -126,10 +142,14 @@ _store_show_fields = _make_store(KEY_COMMENT_TL_FIELDS, [])
 _store_r_expanded_view = _make_store(KEY_REDLINE_TL_EXPANDED, False)
 _store_r_expand_all = _make_store(KEY_REDLINE_TL_EXPAND_ALL, False)
 _store_r_show_fields = _make_store(KEY_REDLINE_TL_FIELDS, [])
+_store_m_expanded_view = _make_store(KEY_MOVE_TL_EXPANDED, False)
+_store_m_expand_all = _make_store(KEY_MOVE_TL_EXPAND_ALL, False)
+_store_m_show_fields = _make_store(KEY_MOVE_TL_FIELDS, [])
 _store_timeline_authors = _make_store(KEY_FILTER_AUTHORS, [])
 _store_main_tab = _make_store(KEY_STATS_MAIN_TAB, MAIN_TABS.comments)
 _store_comment_tab = _make_store(KEY_COMMENT_VIEW, COMMENT_VIEWS.counts)
 _store_redline_tab = _make_store(KEY_REDLINE_VIEW, REDLINE_VIEWS.counts)
+_store_move_tab = _make_store(KEY_MOVE_VIEW, MOVE_VIEWS.counts)
 
 
 def _store_date_range():
@@ -162,6 +182,10 @@ def _store_uploaded_file():
             "_redline_tl_expanded",
             "_redline_tl_expand_all",
             "_redline_tl_fields",
+            "_move_view",
+            "_move_tl_expanded",
+            "_move_tl_expand_all",
+            "_move_tl_fields",
         ):
             if widget_key in st.session_state:
                 del st.session_state[widget_key]
@@ -399,6 +423,28 @@ def _render_redlines(
         redline_view_renderers[redline_tab]()
 
 
+def _render_move_timeline(
+    filtered_m_df: pd.DataFrame,
+    all_authors: list[str],
+) -> None:
+    for key in (KEY_MOVE_TL_EXPANDED, KEY_MOVE_TL_EXPAND_ALL, KEY_MOVE_TL_FIELDS):
+        _seed(key)
+    render_timeline(
+        filtered_m_df,
+        "Who moved text? When?",
+        fields=MOVE_FIELDS,
+        display_cols=["author", "date", "text", "distance", "from_para_idx", "to_para_idx"],
+        default_fields=[f.label for f in MOVE_FIELDS],
+        all_authors=all_authors,
+        expanded_view_key="_move_tl_expanded",
+        expand_all_key="_move_tl_expand_all",
+        show_fields_key="_move_tl_fields",
+        on_expanded_view=_store_m_expanded_view,
+        on_expand_all=_store_m_expand_all,
+        on_show_fields=_store_m_show_fields,
+    )
+
+
 def _render_moves(
     filtered_m_df: pd.DataFrame,
     reference_date: datetime,
@@ -406,10 +452,28 @@ def _render_moves(
     all_authors: list[str],
 ) -> None:
     render_date_caption(filtered_m_df, reference_date, is_closed)
-    st.metric("Total Moves", len(filtered_m_df))
-    render_author_bar(
-        filtered_m_df, "How moved text? How much?", all_authors=all_authors
+    st.metric("Total Moves", len(filtered_m_df), border=True)
+
+    _seed(KEY_MOVE_VIEW)
+    move_tab = st.pills(
+        "View",
+        list(MOVE_VIEWS),
+        key="_move_view",
+        on_change=_store_move_tab,
+        selection_mode="single",
+        label_visibility="collapsed",
     )
+
+    move_view_renderers = {
+        MOVE_VIEWS.counts: lambda: render_author_bar(
+            filtered_m_df, "Who moved text? How much?", all_authors=all_authors
+        ),
+        MOVE_VIEWS.timeline: lambda: _render_move_timeline(
+            filtered_m_df, all_authors
+        ),
+    }
+    if move_tab in move_view_renderers:
+        move_view_renderers[move_tab]()
 
 
 # ---------------------------------------------------------------------------

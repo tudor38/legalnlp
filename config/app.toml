@@ -21,3 +21,4 @@ week_max_days = 180
 main          = ["Comments", "Redlines", "Moves"]
 comment_views = ["Counts", "Timeline"]
 redline_views = ["Counts", "Timeline"]
+move_views    = ["Counts", "Timeline"]

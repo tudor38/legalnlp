@@ -62,6 +62,12 @@ KEY_REDLINE_TL_EXPANDED = "redline_tl_expanded"
 KEY_REDLINE_TL_EXPAND_ALL = "redline_tl_expand_all"
 KEY_REDLINE_TL_FIELDS = "redline_tl_fields"
 
+# Statistics page — move view/timeline state
+KEY_MOVE_VIEW = "move_view"
+KEY_MOVE_TL_EXPANDED = "move_tl_expanded"
+KEY_MOVE_TL_EXPAND_ALL = "move_tl_expand_all"
+KEY_MOVE_TL_FIELDS = "move_tl_fields"
+
 # Topic explorer page
 KEY_TOPIC_RANK_LIMIT = "topic_rank_limit"
 KEY_TOPIC_SEMANTIC_MIN = "topic_semantic_min"

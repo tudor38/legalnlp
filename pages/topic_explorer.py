@@ -333,40 +333,52 @@ _highlevel_max = max(3, min(50, len(docs) // 4))
 _midlevel_max  = max(3, min(30, len(docs) // 6))
 _lowlevel_max  = max(3, min(15, len(docs) // 10))
 
+
+def _to_slider(min_topic_size: int, max_val: int) -> int:
+    """Convert min_topic_size → normalized 1–100 slider position."""
+    if max_val <= 2:
+        return 1
+    return max(1, min(100, round((max_val - min_topic_size) * 99 / (max_val - 2)) + 1))
+
+
+def _from_slider(pos: int, max_val: int) -> int:
+    """Convert normalized 1–100 slider position → min_topic_size."""
+    if max_val <= 2:
+        return 2
+    return max(2, round(max_val - (pos - 1) * (max_val - 2) / 99))
+
+
 st.sidebar.markdown("### Topic Levels")
 
-_highlevel_detail = st.sidebar.slider(
+_highlevel_pos = st.sidebar.slider(
     "High-level",
-    1,
-    _highlevel_max,
-    st.session_state.get("_topic_pref_highlevel", _highlevel_max + 1 - highlevel_default),
+    1, 100,
+    st.session_state.get("_topic_pref_highlevel", _to_slider(highlevel_default, _highlevel_max)),
     key="topic_highlevel",
     help="Move right for more high-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_highlevel"] = _highlevel_detail
-highlevel_size = max(2, _highlevel_max + 1 - _highlevel_detail)
+st.session_state["_topic_pref_highlevel"] = _highlevel_pos
+highlevel_size = _from_slider(_highlevel_pos, _highlevel_max)
 
-_midlevel_detail = st.sidebar.slider(
+_midlevel_pos = st.sidebar.slider(
     "Mid-level",
-    1,
-    _midlevel_max,
-    st.session_state.get("_topic_pref_midlevel", _midlevel_max + 1 - midlevel_default),
+    1, 100,
+    st.session_state.get("_topic_pref_midlevel", _to_slider(midlevel_default, _midlevel_max)),
     key="topic_midlevel",
     help="Move right for more mid-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_midlevel"] = _midlevel_detail
-midlevel_size = max(2, _midlevel_max + 1 - _midlevel_detail)
+st.session_state["_topic_pref_midlevel"] = _midlevel_pos
+midlevel_size = _from_slider(_midlevel_pos, _midlevel_max)
 
-_lowlevel_detail = st.sidebar.slider(
+_lowlevel_pos = st.sidebar.slider(
     "Low-level",
-    1,
-    _lowlevel_max,
-    st.session_state.get("_topic_pref_lowlevel", _lowlevel_max + 1 - lowlevel_default),
+    1, 100,
+    st.session_state.get("_topic_pref_lowlevel", _to_slider(lowlevel_default, _lowlevel_max)),
     key="topic_lowlevel",
     help="Move right for more low-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_lowlevel"] = _lowlevel_detail
-lowlevel_size = max(2, _lowlevel_max + 1 - _lowlevel_detail)
+st.session_state["_topic_pref_lowlevel"] = _lowlevel_pos
+lowlevel_size = _from_slider(_lowlevel_pos, _lowlevel_max)
 
 granularity_sizes = [highlevel_size, midlevel_size, lowlevel_size]
 
@@ -540,6 +552,8 @@ else:
             html_content = _render_interactive_map(
                 plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
             )
+        _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
+        st.session_state["_topic_map_type_pref"] = "Static" if _n_unique <= 6 else "Interactive"
         st.session_state["_topic_map_sig"] = _map_sig
         st.session_state["_topic_map_html"] = html_content
     else:
@@ -596,7 +610,7 @@ def _results_section(
         results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
 
     selected_topics: list[str] = []
-    st.divider()
+
     st.markdown("#### Filter")
     available_topic_cols = [col for col in topic_columns if col in results_df.columns]
     if available_topic_cols and not results_df.empty:
@@ -640,8 +654,7 @@ def _results_section(
     sort_asc = scol2.toggle("Ascending", value=False, key="topic_sort_asc")
     results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(drop=True)
 
-    if search_query or selected_topics:
-        st.caption(f"{len(results_df)} passages")
+    st.caption(f"{len(results_df)} results")
     st.dataframe(
         results_df.head(max_rows),
         width="stretch",

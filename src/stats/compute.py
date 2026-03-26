@@ -159,6 +159,7 @@ def move_ages_df(
                     "author": m.author,
                     "age_days": (now - dt).days,
                     "date": dt,
+                    "text": m.text,
                     "from_para_idx": m.from_para_idx,
                     "to_para_idx": m.to_para_idx,
                     "distance": abs(m.to_para_idx - m.from_para_idx),

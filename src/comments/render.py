@@ -75,6 +75,49 @@ def _reformat_inline_dates(text: str) -> str:
     return re.sub(r"\(\d{2}/\d{2}/\d{4}, \d{2}:\d{2}\)", replace, text)
 
 
+def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -> None:
+    events = []
+    if deleted:
+        idx = para.find(deleted)
+        if idx != -1:
+            events.append((idx, idx + len(deleted), "del", deleted))
+    if inserted:
+        idx = para.find(inserted)
+        if idx != -1:
+            events.append((idx, idx + len(inserted), "ins", inserted))
+    if not events:
+        st.markdown(f"> {para}", unsafe_allow_html=True)
+        return
+    events.sort(key=lambda e: e[0])
+    parts = []
+    pos = 0
+    for start, end, kind, text in events:
+        if start < pos:
+            continue
+        parts.append(para[pos:start])
+        if kind == "del":
+            parts.append(f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>')
+        else:
+            parts.append(f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>')
+        pos = end
+    parts.append(para[pos:])
+    st.markdown("".join(parts), unsafe_allow_html=True)
+
+
+def render_paragraph_with_redline(para: str, text: str, kind: str) -> None:
+    idx = para.find(text)
+    if idx == -1:
+        st.markdown(f"> {para}", unsafe_allow_html=True)
+        return
+    before = para[:idx]
+    after = para[idx + len(text):]
+    if kind == "insertion":
+        styled = f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>'
+    else:
+        styled = f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
+    st.markdown(f"{before}{styled}{after}", unsafe_allow_html=True)
+
+
 def render_paragraph_with_highlight(para: str, selected: str) -> None:
     idx = para.find(selected)
     if idx == -1:
