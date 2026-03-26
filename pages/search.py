@@ -16,7 +16,7 @@ import streamlit as st
 import Stemmer as _PyStemmer
 from spacy.lang.en.stop_words import STOP_WORDS
 
-from src.app_state import MODEL_MINILM, MODEL_MPNET
+from src.app_state import MODEL_MINILM, MODEL_MPNET, get_file_bytes, get_file_name
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
@@ -74,31 +74,43 @@ def _embed(texts: tuple[str, ...], model_name: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 st.subheader("Search")
 
+global_bytes = get_file_bytes()
+global_name = get_file_name()
+
+if global_name:
+    st.caption(f"📄 {global_name}")
+
 uploaded = st.file_uploader(
-    "Upload documents",
+    "Add more files" if global_name else "Upload documents",
     type=["docx", "doc"],
     accept_multiple_files=True,
-    label_visibility="collapsed",
+    label_visibility="collapsed" if global_name else "collapsed",
 )
 
-# Persist uploaded files across navigations
+# Persist extra uploaded files across navigations
 if uploaded:
     st.session_state["_search_stored_files"] = [
         (f.name, f.getvalue()) for f in uploaded
     ]
 
-stored_files: list[tuple[str, bytes]] = st.session_state.get("_search_stored_files", [])
+stored_extra: list[tuple[str, bytes]] = st.session_state.get("_search_stored_files", [])
 
-if not stored_files:
+# Build corpus sources
+extra_files = [(f.name, f.getvalue()) for f in uploaded] if uploaded else stored_extra
+
+files_to_use: list[tuple[str, bytes]] = []
+if global_bytes and global_name:
+    files_to_use.append((global_name, global_bytes))
+files_to_use.extend(extra_files)
+
+if not files_to_use:
     st.caption("Upload one or more Word documents to search across them.")
     st.stop()
 
-files_to_use = [(f.name, f.getvalue()) for f in uploaded] if uploaded else stored_files
-
-if not uploaded and stored_files:
-    names = ", ".join(n for n, _ in stored_files)
+if not uploaded and stored_extra:
+    names = ", ".join(n for n, _ in stored_extra)
     col_info, col_clear = st.columns([6, 1])
-    col_info.caption(f"Using: {names}")
+    col_info.caption(f"Also using: {names}")
     if col_clear.button("Clear", key="search_clear_files"):
         del st.session_state["_search_stored_files"]
         st.rerun()

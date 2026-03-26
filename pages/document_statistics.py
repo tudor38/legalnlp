@@ -479,12 +479,20 @@ def _render_moves(
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
-st.sidebar.file_uploader(
-    "Choose a file",
-    type=_ALLOWED_FILETYPES,
-    key="_doc_upload",
-    on_change=_store_uploaded_file,
-)
+_stored_name = st.session_state.get(KEY_DOC_NAME)
+if _stored_name and not st.session_state.get("_doc_upload"):
+    st.sidebar.caption(f"📄 {_stored_name}")
+    if st.sidebar.button("Clear file", key="stats_clear_file", use_container_width=True):
+        set_file_bytes(None)
+        set_file_name(None)
+        st.rerun()
+else:
+    st.sidebar.file_uploader(
+        "Choose a file",
+        type=_ALLOWED_FILETYPES,
+        key="_doc_upload",
+        on_change=_store_uploaded_file,
+    )
 
 file_bytes = get_file_bytes()
 
