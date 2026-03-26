@@ -23,6 +23,7 @@ from src.utils.text import (
     TOPIC_PALETTE,
     bm25_scores,
     highlight_query_tokens,
+    highlight_regex,
     highlight_term,
     highlight_topic_keywords,
     tokenize,
@@ -257,6 +258,13 @@ if len(docs) < CFG.topic.min_passages:
     st.stop()
 
 st.sidebar.metric("Passages", len(docs))
+
+_PASSAGE_WARN = 1500
+if len(docs) > _PASSAGE_WARN:
+    st.warning(
+        f"**{len(docs)} passages** — topic modelling on large documents may be slow. "
+        f"Try raising **Minimum text length** or switching to **Paragraph** mode to reduce this count."
+    )
 
 
 def _on_search_submit() -> None:
@@ -707,11 +715,11 @@ def _results_section(
             highlighted = highlight_query_tokens(text, search_query)
         elif search_method == "Regex":
             try:
-                highlighted = re.compile(search_query.strip(), flags=re.IGNORECASE).sub(
-                    lambda m: f"<mark>{m.group(0)}</mark>", text
+                highlighted = highlight_regex(
+                    text, re.compile(search_query.strip(), flags=re.IGNORECASE)
                 )
             except re.error:
-                highlighted = text
+                highlighted = highlight_term(text, "")
         else:
             highlighted = highlight_term(text, search_query)
         topic_label = finest_labels[passage_idx] if passage_idx < len(finest_labels) else ""

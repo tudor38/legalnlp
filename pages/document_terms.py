@@ -1,4 +1,5 @@
 import hashlib
+import html
 import io
 import re
 
@@ -9,6 +10,7 @@ import streamlit as st
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_spacy_nlp
 from src.utils.page import require_document
+from src.utils.text import highlight_regex
 
 
 @st.cache_data(show_spinner=False, max_entries=5)
@@ -144,14 +146,15 @@ def _key_dates(dates_df: pd.DataFrame) -> pd.DataFrame:
 def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
     lines: list[str] = []
     for _, row in df.iterrows():
-        term = row[heading_col]
-        context = re.sub(
-            r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])",
-            lambda m: f"<mark>{m.group(0)}</mark>",
+        term = str(row[heading_col])
+        context = highlight_regex(
             row["Context"],
-            flags=re.IGNORECASE,
+            re.compile(
+                r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])",
+                re.IGNORECASE,
+            ),
         )
-        lines.append(f"#### #{row['Para']} — {term}\n\n{context}")
+        lines.append(f"#### #{row['Para']} — {html.escape(term)}\n\n{context}")
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
 
 

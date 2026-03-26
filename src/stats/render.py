@@ -1,3 +1,4 @@
+import html
 from datetime import datetime
 from typing import NamedTuple
 
@@ -379,8 +380,8 @@ def render_timeline(
                             ins_val = ins_row[col_name]
                             if not del_val and not ins_val:
                                 continue
-                            del_span = f'<span style="color:#ef4444;text-decoration:line-through">{del_val}</span>'
-                            ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{ins_val}</span>'
+                            del_span = f'<span style="color:#ef4444;text-decoration:line-through">{html.escape(str(del_val))}</span>'
+                            ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{html.escape(str(ins_val))}</span>'
                             st.markdown(
                                 f"**{label}:** {del_span} → {ins_span}",
                                 unsafe_allow_html=True,

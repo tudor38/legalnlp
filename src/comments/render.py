@@ -1,3 +1,4 @@
+import html
 import re
 import streamlit as st
 import pandas as pd
@@ -49,7 +50,7 @@ def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -
         if idx != -1:
             events.append((idx, idx + len(inserted), "ins", inserted))
     if not events:
-        st.markdown(f"> {para}", unsafe_allow_html=True)
+        st.markdown(f"> {html.escape(para)}", unsafe_allow_html=True)
         return
     events.sort(key=lambda e: e[0])
     parts = []
@@ -57,33 +58,32 @@ def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -
     for start, end, kind, text in events:
         if start < pos:
             continue
-        parts.append(para[pos:start])
+        parts.append(html.escape(para[pos:start]))
         if kind == "del":
             parts.append(
-                f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
+                f'<span style="color:#ef4444;text-decoration:line-through">{html.escape(text)}</span>'
             )
         else:
             parts.append(
-                f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>'
+                f'<span style="color:#3b82f6;text-decoration:underline">{html.escape(text)}</span>'
             )
         pos = end
-    parts.append(para[pos:])
+    parts.append(html.escape(para[pos:]))
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 def render_paragraph_with_redline(para: str, text: str, kind: str) -> None:
     idx = para.find(text)
     if idx == -1:
-        st.markdown(f"> {para}", unsafe_allow_html=True)
+        st.markdown(f"> {html.escape(para)}", unsafe_allow_html=True)
         return
-    before = para[:idx]
-    after = para[idx + len(text) :]
+    before = html.escape(para[:idx])
+    after = html.escape(para[idx + len(text) :])
+    escaped = html.escape(text)
     if kind == "insertion":
-        styled = f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>'
+        styled = f'<span style="color:#3b82f6;text-decoration:underline">{escaped}</span>'
     else:
-        styled = (
-            f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
-        )
+        styled = f'<span style="color:#ef4444;text-decoration:line-through">{escaped}</span>'
     st.markdown(f"{before}{styled}{after}", unsafe_allow_html=True)
 
 

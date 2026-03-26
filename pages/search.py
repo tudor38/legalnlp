@@ -8,6 +8,7 @@ Supports three search methods:
   Semantic  — cosine similarity via sentence-transformers embeddings
 """
 
+import html
 import io
 import re
 
@@ -23,6 +24,7 @@ from src.utils.text import (
     TOPIC_PALETTE,
     bm25_scores,
     highlight_query_tokens,
+    highlight_regex,
     highlight_term,
 )
 
@@ -292,10 +294,7 @@ for idx, score in page_hits:
         display = highlight_term(passage, q, color)
         score_str = ""
     elif method == "Regex":
-        display = pattern.sub(
-            lambda m, c=color: f'<mark style="background:{c}">{m.group(0)}</mark>',
-            passage,
-        )
+        display = highlight_regex(passage, pattern, color)
         score_str = ""
     elif method == "Relevance":
         display = highlight_query_tokens(passage, q, color)
@@ -308,7 +307,7 @@ for idx, score in page_hits:
         col_doc, col_score = st.columns([5, 1])
         with col_doc:
             st.markdown(
-                f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{doc_name}</span>',
+                f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{html.escape(doc_name)}</span>',
                 unsafe_allow_html=True,
             )
         with col_score:
