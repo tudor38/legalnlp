@@ -4,44 +4,6 @@ import pandas as pd
 from annotated_text import annotated_text
 from datetime import datetime
 from src.comments.extract import Comment, WordVersion
-import altair as alt
-
-
-def render_thread_depth(comments: list[Comment]) -> None:
-    df = pd.DataFrame([c.to_row() for c in comments if c.replies])
-    if df.empty:
-        st.caption("No threaded comments.")
-        return
-
-    df["resolved"] = df["resolved"].replace({True: "Yes", False: "No"})
-
-    chart = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X(
-                "replies:Q", title="Replies", axis=alt.Axis(tickMinStep=1, format="d")
-            ),
-            y=alt.Y("author:N", sort="-x", title="Author"),
-            color=alt.Color(
-                "resolved:N",
-                scale=alt.Scale(domain=["No", "Yes"], range=["#ff4b4b", "#21c354"]),
-                legend=alt.Legend(title="Resolved"),
-            ),
-            tooltip=[
-                alt.Tooltip("author:N", title="Author"),
-                alt.Tooltip("text:N", title="Comment"),
-                alt.Tooltip("replies:Q", title="Replies"),
-                alt.Tooltip("resolved:N", title="Resolved"),
-            ],
-        )
-        .properties(
-            title="Comments with most replies, possibly indicating disagreement or complex issues",
-            # height=60 * len(df) + 60,
-        )
-    )
-    st.altair_chart(chart, width="stretch")
-
 
 def _format_date(iso: str) -> str:
     try:

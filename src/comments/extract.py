@@ -34,7 +34,7 @@ keyed by their position in XML order (counting all <w:p> elements).
 import io
 import zipfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -104,27 +104,6 @@ class Comment:
     parent_id: Optional[str] = None
     replies: list["Comment"] = field(default_factory=list)
     context: Optional[CommentContext] = None
-
-    def to_row(self) -> dict:
-        return {
-            f.name: getattr(self, f.name)
-            for f in fields(self)
-            if f.name not in ("replies", "context", "parent_id")
-        } | {
-            "parent_id": self.parent_id,
-            "replies": len(self.replies),
-            "start_para_idx": self.context.start_para_idx if self.context else None,
-            "end_para_idx": self.context.end_para_idx if self.context else None,
-            "selected": self.context.selected_text if self.context else None,
-            "selected_start": self.context.selected_span.start
-            if self.context
-            else None,
-            "selected_end": self.context.selected_span.end if self.context else None,
-            "paragraph": self.context.paragraph_text if self.context else None,
-            "sentences": [s.text for s in self.context.sentences]
-            if self.context
-            else [],
-        }
 
 
 def _is_libreoffice(zip_names: list[str], names_bytes: dict[str, bytes]) -> bool:

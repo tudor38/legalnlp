@@ -2,7 +2,6 @@ import base64
 import hashlib
 import io
 import re
-import time
 from collections.abc import Sequence
 
 import datamapplot
@@ -17,7 +16,7 @@ import Stemmer as _PyStemmer
 from spacy.lang.en.stop_words import STOP_WORDS
 from umap import UMAP
 
-from src.app_state import KEY_TOPIC_RANK_LIMIT, KEY_TOPIC_SEMANTIC_MIN, MODEL_MINILM, MODEL_MPNET
+from src.app_state import MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
@@ -305,9 +304,6 @@ def _search_method_pills() -> None:
 active_query = st.session_state.get("_topic_active_query", "")
 active_method = st.session_state.get("_topic_active_method", "Keyword")
 
-rank_limit = st.session_state.get(KEY_TOPIC_RANK_LIMIT, 200)
-semantic_min_score = st.session_state.get(KEY_TOPIC_SEMANTIC_MIN, 0.20)
-
 if active_method in ("Relevance", "Semantic"):
     st.sidebar.markdown("### Search")
     rank_limit = st.sidebar.slider(
@@ -507,13 +503,9 @@ else:
 def _show_map(
     plot_embeddings: np.ndarray,
     plot_label_layers: tuple,
-    docs: tuple[str, ...],
-    matched_indices: list[int],
-    n_plot: int,
     zoom: float,
     html_content: str | None,
 ) -> None:
-    expanded = n_plot >= 100
     if html_content is None:
         st.caption("Interactive map is not available for this dataset. Adjusting topic sliders could enable the option to view an interactive map.")
         with st.spinner("Building static map…"):
@@ -551,8 +543,7 @@ elif len(matched_indices) < 10:
 else:
     plot_embeddings = reduced_embeddings[matched_indices]
     plot_label_layers = tuple(labels[matched_indices] for labels in label_layers)
-    n_plot = len(matched_indices)
-    zoom = max(0.33, min(1.0, 15 / n_plot))
+    zoom = max(0.33, min(1.0, 15 / len(matched_indices)))
 
     _map_sig = (tuple(matched_indices), tuple(granularity_sizes), embedding_model_name)
     if st.session_state.get("_topic_map_sig") != _map_sig:
@@ -568,7 +559,7 @@ else:
             plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
         )
 
-    _show_map(plot_embeddings, plot_label_layers, docs, matched_indices, n_plot, zoom, html_content)
+    _show_map(plot_embeddings, plot_label_layers, zoom, html_content)
 
 st.markdown("#### Search")
 st.text_input(
