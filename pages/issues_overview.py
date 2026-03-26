@@ -287,7 +287,7 @@ def _assess_issue(
 # ---------------------------------------------------------------------------
 # Clustering
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _embed_threads(texts: tuple[str, ...]) -> np.ndarray:
     return get_sentence_transformer(MODEL_MINILM).encode(
         list(texts), show_progress_bar=False, normalize_embeddings=True
@@ -435,7 +435,7 @@ def _summary_row(high_n: int, med_n: int, low_n: int, total_n: int) -> str:
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _load_data(file_bytes: bytes):
     comments, _ = extract_comments(io.BytesIO(file_bytes))
     doc = extract_paragraphs(io.BytesIO(file_bytes))

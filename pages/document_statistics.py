@@ -198,6 +198,7 @@ def _store_uploaded_file():
 # ---------------------------------------------------------------------------
 # Document loading
 # ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False, max_entries=3)
 def _load_document(file_bytes: bytes) -> tuple:
     comments, version = extract_comments(io.BytesIO(file_bytes))
     redlines, _ = extract_redlines(io.BytesIO(file_bytes))
@@ -495,6 +496,10 @@ else:
     )
 
 file_bytes = get_file_bytes()
+
+if not file_bytes:
+    st.info("Upload a Word document using the sidebar to get started.")
+    st.stop()
 
 if file_bytes:
     try:

@@ -55,13 +55,13 @@ def _highlight_query_tokens(text: str, query: str, color: str = "") -> str:
 # ---------------------------------------------------------------------------
 # Cached extraction
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=10)
 def _extract(file_bytes: bytes) -> list[str]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
     return [p.strip() for p in doc.paragraphs if len(p.strip()) >= 30]
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=10)
 def _embed(texts: tuple[str, ...], model_name: str) -> np.ndarray:
     encoder = get_sentence_transformer(model_name)
     return encoder.encode(

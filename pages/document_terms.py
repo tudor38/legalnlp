@@ -11,7 +11,7 @@ from src.utils.models import get_spacy_nlp
 from src.utils.page import require_document
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
     patterns = [
         # "Term" means / shall mean / has the meaning
@@ -47,7 +47,7 @@ def _extract_definitions(paragraphs: tuple[str, ...]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _extract_entities(
     paragraphs: tuple[str, ...],
     labels: tuple[str, ...],
@@ -76,7 +76,7 @@ _MONEY_RE = re.compile(
 )
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _extract_money(paragraphs: tuple[str, ...]) -> pd.DataFrame:
     rows = []
     for idx, para in enumerate(paragraphs):
@@ -150,7 +150,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _get_paragraphs(file_bytes: bytes) -> tuple[str, ...]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
     return tuple(p.strip() for p in doc.paragraphs if p and p.strip())

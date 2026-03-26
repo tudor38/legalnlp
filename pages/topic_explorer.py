@@ -62,13 +62,13 @@ def _topic_labels(topic_model: BERTopic, topics: list[int]) -> np.ndarray:
     return np.array(labels, dtype=object)
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=3)
 def _embed_docs(docs: tuple[str, ...], embedding_model_name: str) -> np.ndarray:
     encoder = get_sentence_transformer(embedding_model_name)
     return encoder.encode(list(docs), show_progress_bar=False)
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=9)
 def _fit_topics(
     docs: tuple[str, ...],
     embeddings: np.ndarray,
@@ -88,7 +88,7 @@ def _fit_topics(
     return model, topics
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=3)
 def _reduce_to_2d(
     embeddings: np.ndarray, n_neighbors: int, min_dist: float
 ) -> np.ndarray:
@@ -102,7 +102,7 @@ def _reduce_to_2d(
     return reducer.fit_transform(embeddings)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _render_static_map(
     plot_embeddings: np.ndarray,
     plot_label_layers: tuple,
@@ -126,7 +126,7 @@ def _render_static_map(
     return base64.b64encode(buf.read()).decode()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=5)
 def _render_interactive_map(
     plot_embeddings: np.ndarray,
     plot_label_layers: tuple,
@@ -548,16 +548,17 @@ else:
 
     _map_sig = (tuple(matched_indices), tuple(granularity_sizes), embedding_model_name)
     if st.session_state.get("_topic_map_sig") != _map_sig:
+        _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
+        st.session_state["_topic_map_type_pref"] = "Static" if _n_unique <= 6 else "Interactive"
+        st.session_state["_topic_map_sig"] = _map_sig
         with st.spinner("Building map…"):
             html_content = _render_interactive_map(
                 plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
             )
-        _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
-        st.session_state["_topic_map_type_pref"] = "Static" if _n_unique <= 6 else "Interactive"
-        st.session_state["_topic_map_sig"] = _map_sig
-        st.session_state["_topic_map_html"] = html_content
     else:
-        html_content = st.session_state["_topic_map_html"]
+        html_content = _render_interactive_map(
+            plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
+        )
 
     _show_map(plot_embeddings, plot_label_layers, docs, matched_indices, n_plot, zoom, html_content)
 

@@ -23,19 +23,19 @@ def _quiet():
         yield
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=4)
 def get_sentence_transformer(model_name: str) -> SentenceTransformer:
     with _quiet():
         return SentenceTransformer(model_name)
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=4)
 def get_cross_encoder(model_name: str) -> CrossEncoder:
     with _quiet():
         return CrossEncoder(model_name)
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=4)
 def get_spacy_nlp(model_name: str = "en_core_web_sm"):
     try:
         return spacy.load(model_name)
