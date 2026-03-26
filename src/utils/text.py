@@ -10,6 +10,8 @@ import numpy as np
 import Stemmer as _PyStemmer
 from spacy.lang.en.stop_words import STOP_WORDS
 
+from src.stats.config import CFG
+
 _stemmer = _PyStemmer.Stemmer("english")
 
 TOPIC_PALETTE = [
@@ -77,7 +79,10 @@ def tokenize(text: str) -> list[str]:
 
 
 def bm25_scores(
-    docs: Sequence[str], query: str, k1: float = 1.5, b: float = 0.75
+    docs: Sequence[str],
+    query: str,
+    k1: float = CFG.search.bm25_k1,
+    b: float = CFG.search.bm25_b,
 ) -> np.ndarray:
     query_terms = tokenize(query)
     if not query_terms:

@@ -18,6 +18,7 @@ from src.app_state import MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
+from src.stats.config import CFG
 from src.utils.text import (
     TOPIC_PALETTE,
     bm25_scores,
@@ -246,10 +247,10 @@ if analysis_unit == "Sentence":
 else:
     docs = _clean_docs(doc_paragraphs.paragraphs, min_chars=min_chars)
 
-if len(docs) < 12:
+if len(docs) < CFG.topic.min_passages:
     st.warning(
         f"Only {len(docs)} passage{'s' if len(docs) != 1 else ''} remain after filtering "
-        f"(minimum 12 required). "
+        f"(minimum {CFG.topic.min_passages} required). "
         f"Try lowering **Minimum text length** (currently {min_chars} chars) "
         f"or switching the analysis unit to **Sentence**."
     )
@@ -417,7 +418,7 @@ if st.session_state.get("_topic_state_key") != _topic_state_key:
             reduced_embeddings = _reduce_to_2d(
                 embeddings=embeddings,
                 n_neighbors=min(30, max(5, len(docs) // 25)),
-                min_dist=0.05,
+                min_dist=CFG.topic.umap_min_dist,
             )
 
             label_layers: list[np.ndarray] = []
@@ -552,7 +553,7 @@ else:
     if st.session_state.get("_topic_map_sig") != _map_sig:
         _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
         st.session_state["_topic_map_type_pref"] = (
-            "Static" if _n_unique <= 6 else "Interactive"
+            "Static" if _n_unique <= CFG.topic.static_map_threshold else "Interactive"
         )
         st.session_state["_topic_map_sig"] = _map_sig
         with st.spinner("Building map…"):
@@ -595,7 +596,7 @@ def _results_section(
     topic_columns = ["High-level topics", "Mid-level topics", "Low-level topics"]
     results_df = pd.DataFrame(
         {
-            "paragraph_idx": np.arange(len(docs)),
+            "passage_idx": np.arange(len(docs)),
             "text": docs,
         }
     )
@@ -611,7 +612,7 @@ def _results_section(
         else results_df.iloc[0:0]
     )
     if score_map:
-        results_df["score"] = results_df["paragraph_idx"].map(score_map)
+        results_df["score"] = results_df["passage_idx"].map(score_map)
         results_df = results_df.sort_values("score", ascending=False).reset_index(
             drop=True
         )
@@ -647,12 +648,12 @@ def _results_section(
 
     st.markdown("#### Results")
     sortable_cols = [
-        c for c in ["score", *topic_columns, "paragraph_idx"] if c in results_df.columns
+        c for c in ["score", *topic_columns, "passage_idx"] if c in results_df.columns
     ]
     has_score = bool(score_map)
     if has_score != st.session_state.get("_topic_had_score"):
         st.session_state["_topic_had_score"] = has_score
-        st.session_state["topic_sort_col"] = "score" if has_score else "paragraph_idx"
+        st.session_state["topic_sort_col"] = "score" if has_score else "passage_idx"
         st.session_state["topic_sort_asc"] = not has_score
     scol1, scol2 = st.columns([3, 1])
     sort_by = scol1.selectbox(
@@ -673,7 +674,7 @@ def _results_section(
         width="stretch",
         hide_index=True,
         column_config={
-            "paragraph_idx": st.column_config.NumberColumn("Para", width="small"),
+            "passage_idx": st.column_config.NumberColumn("#", width="small"),
             "text": st.column_config.TextColumn("Passage", width="large"),
             "score": st.column_config.NumberColumn(
                 "Score", format="%.4f", width="small"
@@ -700,7 +701,7 @@ def _results_section(
     color_map = _topic_color_map(finest_labels)
     lines: list[str] = []
     for _, row in shown_df.iterrows():
-        para_idx = int(row["paragraph_idx"])
+        passage_idx = int(row["passage_idx"])
         text = str(row["text"])
         if search_method in ("Relevance", "Semantic"):
             highlighted = highlight_query_tokens(text, search_query)
@@ -713,11 +714,11 @@ def _results_section(
                 highlighted = text
         else:
             highlighted = highlight_term(text, search_query)
-        topic_label = finest_labels[para_idx] if para_idx < len(finest_labels) else ""
+        topic_label = finest_labels[passage_idx] if passage_idx < len(finest_labels) else ""
         color = color_map.get(str(topic_label), "#ffe066")
         highlighted = highlight_topic_keywords(highlighted, str(topic_label), color)
         topics = " → ".join(f"{row[col]}" for col in topic_cols)
-        lines.append(f"#### Para {para_idx} — {topics}\n\n{highlighted}")
+        lines.append(f"#### #{passage_idx} — {topics}\n\n{highlighted}")
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
 
 

@@ -42,6 +42,20 @@ class ChartConfig:
 
 
 @dataclass(frozen=True)
+class SearchConfig:
+    min_para_chars: int
+    bm25_k1: float
+    bm25_b: float
+
+
+@dataclass(frozen=True)
+class TopicConfig:
+    min_passages: int
+    static_map_threshold: int
+    umap_min_dist: float
+
+
+@dataclass(frozen=True)
 class TimeBinConfig:
     day_max_days: int
     week_max_days: int
@@ -59,6 +73,8 @@ class Page1Tabs:
 class AppConfig:
     display: DisplayConfig
     chart: ChartConfig
+    search: SearchConfig
+    topic: TopicConfig
     time_bin: TimeBinConfig
     page_1_tabs: Page1Tabs
 
@@ -117,6 +133,22 @@ def _parse(raw: dict) -> AppConfig:
             ),
         )
 
+        search_raw = _section(raw, "search")
+        search = SearchConfig(
+            min_para_chars=_field(search_raw, "min_para_chars", "search", int),
+            bm25_k1=_field(search_raw, "bm25_k1", "search", float),
+            bm25_b=_field(search_raw, "bm25_b", "search", float),
+        )
+
+        topic_raw = _section(raw, "topic")
+        topic = TopicConfig(
+            min_passages=_field(topic_raw, "min_passages", "topic", int),
+            static_map_threshold=_field(
+                topic_raw, "static_map_threshold", "topic", int
+            ),
+            umap_min_dist=_field(topic_raw, "umap_min_dist", "topic", float),
+        )
+
         tb_raw = _section(raw, "time_bin")
         time_bin = TimeBinConfig(
             day_max_days=_field(tb_raw, "day_max_days", "time_bin", int),
@@ -134,6 +166,8 @@ def _parse(raw: dict) -> AppConfig:
         return AppConfig(
             display=display,
             chart=chart,
+            search=search,
+            topic=topic,
             time_bin=time_bin,
             page_1_tabs=page_1_tabs,
         )

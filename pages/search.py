@@ -18,6 +18,7 @@ from src.app_state import MODEL_MINILM, MODEL_MPNET, get_file_bytes, get_file_na
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
+from src.stats.config import CFG
 from src.utils.text import (
     TOPIC_PALETTE,
     bm25_scores,
@@ -32,7 +33,7 @@ from src.utils.text import (
 @st.cache_data(show_spinner=False, max_entries=10)
 def _extract(file_bytes: bytes) -> list[str]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
-    return [p.strip() for p in doc.paragraphs if len(p.strip()) >= 30]
+    return [p.strip() for p in doc.paragraphs if len(p.strip()) >= CFG.search.min_para_chars]
 
 
 @st.cache_data(show_spinner=False, max_entries=10)

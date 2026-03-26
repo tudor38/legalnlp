@@ -151,7 +151,7 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
             row["Context"],
             flags=re.IGNORECASE,
         )
-        lines.append(f"#### Para {row['Para']} — {term}\n\n{context}")
+        lines.append(f"#### #{row['Para']} — {term}\n\n{context}")
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
 
 
@@ -257,7 +257,7 @@ with tab_defs:
             width="stretch",
             hide_index=True,
             column_config={
-                "Para": st.column_config.NumberColumn("Para", width="small"),
+                "Para": st.column_config.NumberColumn("#", width="small"),
                 "Term": st.column_config.TextColumn("Term", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -281,7 +281,7 @@ with tab_dates:
             width="stretch",
             hide_index=True,
             column_config={
-                "Para": st.column_config.NumberColumn("Para", width="small"),
+                "Para": st.column_config.NumberColumn("#", width="small"),
                 "Value": st.column_config.TextColumn("Date", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -328,7 +328,7 @@ with tab_parties:
                 width="stretch",
                 hide_index=True,
                 column_config={
-                    "Para": st.column_config.NumberColumn("Para", width="small"),
+                    "Para": st.column_config.NumberColumn("#", width="small"),
                     "Value": st.column_config.TextColumn("Entity", width="medium"),
                     "Type": st.column_config.TextColumn("Type", width="small"),
                     "Context": st.column_config.TextColumn("Context", width="large"),
@@ -347,7 +347,7 @@ with tab_money:
             width="stretch",
             hide_index=True,
             column_config={
-                "Para": st.column_config.NumberColumn("Para", width="small"),
+                "Para": st.column_config.NumberColumn("#", width="small"),
                 "Value": st.column_config.TextColumn("Amount", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
@@ -365,7 +365,7 @@ with tab_numbers:
             width="stretch",
             hide_index=True,
             column_config={
-                "Para": st.column_config.NumberColumn("Para", width="small"),
+                "Para": st.column_config.NumberColumn("#", width="small"),
                 "Value": st.column_config.TextColumn("Value", width="medium"),
                 "Context": st.column_config.TextColumn("Context", width="large"),
             },
