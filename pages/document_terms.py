@@ -60,17 +60,22 @@ def _extract_entities(
         for ent in doc.ents:
             if ent.label_ in labels:
                 rows.append(
-                    {"Para": idx, "Value": ent.text, "Type": ent.label_, "Context": para}
+                    {
+                        "Para": idx,
+                        "Value": ent.text,
+                        "Type": ent.label_,
+                        "Context": para,
+                    }
                 )
     return pd.DataFrame(rows)
 
 
 _MONEY_RE = re.compile(
     r"(?:"
-    r"(?:USD|EUR|GBP|CHF|CAD|AUD|JPY)\s+\d{1,3}(?:,\d{3})*(?:\.\d+)?"   # USD 8,500
-    r"|[\$€£]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?"                            # $8,500 / € 100,000
-    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:USD|EUR|GBP|CHF)"              # 8,500 USD
-    r"|\d+(?:\.\d+)?\s*(?:%|percent|per\s+cent)"                         # 18%, 1.5 %
+    r"(?:USD|EUR|GBP|CHF|CAD|AUD|JPY)\s+\d{1,3}(?:,\d{3})*(?:\.\d+)?"  # USD 8,500
+    r"|[\$€£]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?"  # $8,500 / € 100,000
+    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:USD|EUR|GBP|CHF)"  # 8,500 USD
+    r"|\d+(?:\.\d+)?\s*(?:%|percent|per\s+cent)"  # 18%, 1.5 %
     r")",
     re.IGNORECASE,
 )
@@ -98,7 +103,7 @@ _FALSE_DATE_PATTERNS = re.compile(
     r"|§\s*\d+"  # "§ 23"
     r"|\d+\([a-zA-Z]\)"  # "4(b)"
     r"|\d+\)\s*(years?|months?|days?|weeks?|hours?)"  # "30) days", "2) years" (spaCy picks up the tail of parenthetical numbers)
-    r"|\d+\s+(years?|months?|days?|weeks?|hours?)$"   # "30 days", "12 months" — plain durations, not calendar dates
+    r"|\d+\s+(years?|months?|days?|weeks?|hours?)$"  # "30 days", "12 months" — plain durations, not calendar dates
     r")"
 )
 
@@ -168,7 +173,12 @@ if not paragraphs:
     st.stop()
 
 with st.sidebar:
-    _all_models = ["en_core_web_sm", "en_core_web_md", "en_core_web_lg", "en_core_web_trf"]
+    _all_models = [
+        "en_core_web_sm",
+        "en_core_web_md",
+        "en_core_web_lg",
+        "en_core_web_trf",
+    ]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
     _saved = st.session_state.get("_dt_spacy_model_pref")
     _index = _installed.index(_saved) if _saved in _installed else 0
@@ -198,26 +208,34 @@ if st.session_state.get("_doc_terms_key") != _cache_key:
         with st.spinner("Extracting document terms…"):
             defs_df = _extract_definitions(paragraphs)
             dates_df = _clean_dates(
-                _extract_entities(paragraphs, ("DATE",), spacy_model).drop(columns="Type", errors="ignore")
+                _extract_entities(paragraphs, ("DATE",), spacy_model).drop(
+                    columns="Type", errors="ignore"
+                )
             )
             parties_df = _extract_entities(
-                paragraphs, ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"), spacy_model
+                paragraphs,
+                ("LAW", "PERSON", "ORG", "GPE", "LOC", "PRODUCT"),
+                spacy_model,
             )
             money_df = _extract_money(paragraphs)
             numbers_df = _clean_amounts(
-                _extract_entities(paragraphs, ("QUANTITY", "CARDINAL"), spacy_model).drop(columns="Type", errors="ignore")
+                _extract_entities(
+                    paragraphs, ("QUANTITY", "CARDINAL"), spacy_model
+                ).drop(columns="Type", errors="ignore")
             )
     except RuntimeError as e:
         st.error(str(e))
         st.stop()
-    st.session_state.update({
-        "_doc_terms_key": _cache_key,
-        "_doc_terms_defs": defs_df,
-        "_doc_terms_dates": dates_df,
-        "_doc_terms_parties": parties_df,
-        "_doc_terms_money": money_df,
-        "_doc_terms_numbers": numbers_df,
-    })
+    st.session_state.update(
+        {
+            "_doc_terms_key": _cache_key,
+            "_doc_terms_defs": defs_df,
+            "_doc_terms_dates": dates_df,
+            "_doc_terms_parties": parties_df,
+            "_doc_terms_money": money_df,
+            "_doc_terms_numbers": numbers_df,
+        }
+    )
 else:
     defs_df = st.session_state["_doc_terms_defs"]
     dates_df = st.session_state["_doc_terms_dates"]

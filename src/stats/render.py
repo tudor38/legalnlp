@@ -10,7 +10,11 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import plotly.express as px
-from src.comments.render import render_paragraph_with_highlight, render_paragraph_with_redline, render_paragraph_with_redline_pair
+from src.comments.render import (
+    render_paragraph_with_highlight,
+    render_paragraph_with_redline,
+    render_paragraph_with_redline_pair,
+)
 
 # Tableau10 desaturated — consistent across Altair and Plotly
 AUTHOR_PALETTE = [
@@ -298,6 +302,7 @@ def render_timeline(
             kind_set = set(display["Kind"].unique())
             if "insertion" in kind_set and "deletion" in kind_set:
                 from collections import defaultdict
+
                 ins_by_key: dict[tuple, list[int]] = defaultdict(list)
                 del_by_key: dict[tuple, list[int]] = defaultdict(list)
                 for idx, r in display.iterrows():
@@ -376,7 +381,10 @@ def render_timeline(
                                 continue
                             del_span = f'<span style="color:#ef4444;text-decoration:line-through">{del_val}</span>'
                             ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{ins_val}</span>'
-                            st.markdown(f"**{label}:** {del_span} → {ins_span}", unsafe_allow_html=True)
+                            st.markdown(
+                                f"**{label}:** {del_span} → {ins_span}",
+                                unsafe_allow_html=True,
+                            )
             else:
                 kind_label = f" · {row['Kind']}" if "Kind" in display.columns else ""
                 with st.expander(

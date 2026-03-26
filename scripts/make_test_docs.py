@@ -28,8 +28,14 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "test_docs")
 # Low-level XML helpers
 # ---------------------------------------------------------------------------
 
+
 def _xe(s: str) -> str:
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def _t(text: str) -> str:
@@ -48,10 +54,16 @@ def _dt(text: str) -> str:
 # Run-level XML builders
 # ---------------------------------------------------------------------------
 
+
 def run(text: str, bold: bool = False, italic: bool = False) -> str:
     rpr = ""
     if bold or italic:
-        rpr = "<w:rPr>" + ("<w:b/>" if bold else "") + ("<w:i/>" if italic else "") + "</w:rPr>"
+        rpr = (
+            "<w:rPr>"
+            + ("<w:b/>" if bold else "")
+            + ("<w:i/>" if italic else "")
+            + "</w:rPr>"
+        )
     return f"<w:r>{rpr}{_t(text)}</w:r>"
 
 
@@ -120,6 +132,7 @@ def crefs(*cids: int) -> str:
 # Paragraph-level XML builders
 # ---------------------------------------------------------------------------
 
+
 def para(content: str, pid: str = "") -> str:
     pid_attr = f' w14:paraId="{pid}"' if pid else ""
     return f"<w:p{pid_attr}>{content}</w:p>"
@@ -154,8 +167,10 @@ def blank() -> str:
 # Comment XML builders
 # ---------------------------------------------------------------------------
 
-def comment_xml(cid: int, author: str, date: str, initials: str,
-                text: str, para_id: str) -> str:
+
+def comment_xml(
+    cid: int, author: str, date: str, initials: str, text: str, para_id: str
+) -> str:
     return (
         f'<w:comment w:id="{cid}" w:author="{_xe(author)}" '
         f'w:date="{date}" w:initials="{_xe(initials)}">'
@@ -173,6 +188,7 @@ def comment_xml(cid: int, author: str, date: str, initials: str,
 # Document parts
 # ---------------------------------------------------------------------------
 
+
 def content_types() -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -184,7 +200,7 @@ def content_types() -> str:
         '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>'
         '<Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/>'
         '<Override PartName="/word/commentsIds.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml"/>'
-        '</Types>'
+        "</Types>"
     )
 
 
@@ -194,7 +210,7 @@ ROOT_RELS = (
     '<Relationship Id="rId1" '
     'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
     'Target="word/document.xml"/>'
-    '</Relationships>'
+    "</Relationships>"
 )
 
 DOC_RELS = (
@@ -212,7 +228,7 @@ DOC_RELS = (
     '<Relationship Id="rId4" '
     'Type="http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" '
     'Target="commentsIds.xml"/>'
-    '</Relationships>'
+    "</Relationships>"
 )
 
 STYLES = (
@@ -221,17 +237,17 @@ STYLES = (
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'
     '<w:name w:val="Normal"/>'
     '<w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>'
-    '</w:style>'
+    "</w:style>"
     '<w:style w:type="character" w:styleId="CommentReference">'
     '<w:name w:val="Comment Reference"/>'
     '<w:rPr><w:sz w:val="16"/></w:rPr>'
-    '</w:style>'
+    "</w:style>"
     '<w:style w:type="paragraph" w:styleId="CommentText">'
     '<w:name w:val="Comment Text"/>'
-    '<w:pPr/>'
+    "<w:pPr/>"
     '<w:rPr><w:sz w:val="20"/></w:rPr>'
-    '</w:style>'
-    '</w:styles>'
+    "</w:style>"
+    "</w:styles>"
 )
 
 DOC_NS = (
@@ -244,9 +260,9 @@ DOC_NS = (
 def wrap_document(body: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<w:document {DOC_NS}>'
+        f"<w:document {DOC_NS}>"
         f"<w:body>{body}"
-        '<w:sectPr/>'
+        "<w:sectPr/>"
         "</w:body>"
         "</w:document>"
     )
@@ -255,7 +271,7 @@ def wrap_document(body: str) -> str:
 def wrap_comments(inner: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<w:comments {DOC_NS}>'
+        f"<w:comments {DOC_NS}>"
         f"{inner}"
         "</w:comments>"
     )
@@ -264,7 +280,7 @@ def wrap_comments(inner: str) -> str:
 def wrap_comments_extended(inner: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<w15:commentsEx '
+        "<w15:commentsEx "
         'xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">'
         f"{inner}"
         "</w15:commentsEx>"
@@ -279,7 +295,7 @@ def comment_ex(para_id: str, parent_para_id: str = "", done: str = "0") -> str:
 def wrap_comments_ids(inner: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<w16cid:commentsIds '
+        "<w16cid:commentsIds "
         'xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid">'
         f"{inner}"
         "</w16cid:commentsIds>"
@@ -287,15 +303,23 @@ def wrap_comments_ids(inner: str) -> str:
 
 
 def comment_id_entry(para_id: str, durable_id: int) -> str:
-    return f'<w16cid:commentId w16cid:paraId="{para_id}" w16cid:durableId="{durable_id}"/>'
+    return (
+        f'<w16cid:commentId w16cid:paraId="{para_id}" w16cid:durableId="{durable_id}"/>'
+    )
 
 
 # ---------------------------------------------------------------------------
 # Helper to write a .docx zip
 # ---------------------------------------------------------------------------
 
-def write_docx(path: str, document_xml: str, comments_xml: str,
-               comments_extended_xml: str, comments_ids_xml: str) -> None:
+
+def write_docx(
+    path: str,
+    document_xml: str,
+    comments_xml: str,
+    comments_extended_xml: str,
+    comments_ids_xml: str,
+) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", content_types())
@@ -361,6 +385,7 @@ def write_docx(path: str, document_xml: str, comments_xml: str,
 #   C25  Jennifer / Feb 22 — final sign-off, all points closed (standalone, constructive)
 # ===========================================================================
 
+
 def make_services_agreement() -> None:
 
     body = ""
@@ -371,20 +396,25 @@ def make_services_agreement() -> None:
 
     # ── Preamble  [C1 on effective date] ─────────────────────────────────────
     body += para(
-        run("This Software Development Services Agreement (the \u201cAgreement\u201d) "
-            "is entered into as of ")
+        run(
+            "This Software Development Services Agreement (the \u201cAgreement\u201d) "
+            "is entered into as of "
+        )
         + cstart(1)
         + run("January 15, 2024")
-        + cend(1) + cref(1)
-        + run(" (the \u201cEffective Date\u201d), between Acme Corporation, a New York "
-              "corporation with its principal place of business at 350 Fifth Avenue, "
-              "New York, NY 10118 (\u201cClient\u201d), and TechVenture Ltd., a "
-              "Delaware corporation with its principal place of business at 1 Market "
-              "Street, Suite 900, San Francisco, CA 94105 (\u201cService Provider\u201d) "
-              "(together, the \u201cParties\u201d). The total fixed fee under this "
-              "Agreement is USD 150,000, payable in milestones as set out in "
-              "Section\u00a02. This Agreement supersedes all prior negotiations and "
-              "the Letter of Intent dated December 1, 2023."),
+        + cend(1)
+        + cref(1)
+        + run(
+            " (the \u201cEffective Date\u201d), between Acme Corporation, a New York "
+            "corporation with its principal place of business at 350 Fifth Avenue, "
+            "New York, NY 10118 (\u201cClient\u201d), and TechVenture Ltd., a "
+            "Delaware corporation with its principal place of business at 1 Market "
+            "Street, Suite 900, San Francisco, CA 94105 (\u201cService Provider\u201d) "
+            "(together, the \u201cParties\u201d). The total fixed fee under this "
+            "Agreement is USD 150,000, payable in milestones as set out in "
+            "Section\u00a02. This Agreement supersedes all prior negotiations and "
+            "the Letter of Intent dated December 1, 2023."
+        ),
         pid="10000001",
     )
     body += blank()
@@ -393,21 +423,29 @@ def make_services_agreement() -> None:
     body += heading("1.  SERVICES", pid="10000002")
     body += para(
         run("Service Provider agrees to ")
-        + del_("develop, test, deploy, and maintain",
-               "Sarah Chen", "2024-01-20T09:00:00Z", 1)
-        + ins("develop and deliver",
-              "Sarah Chen", "2024-01-20T09:00:00Z", 2)
-        + run(" a custom inventory management software system (the \u201cSoftware\u201d) "
-              "for Client\u2019s warehouse operations across its three (3) distribution "
-              "centres located in Newark (NJ), Columbus (OH), and Atlanta (GA). "
-              "The Software shall integrate with Client\u2019s existing SAP ERP platform "
-              "(version 4.7) via REST API and shall support a minimum of 500 concurrent "
-              "users with a page-load response time not exceeding 2\u00a0seconds under "
-              "normal operating conditions. ")
+        + del_(
+            "develop, test, deploy, and maintain",
+            "Sarah Chen",
+            "2024-01-20T09:00:00Z",
+            1,
+        )
+        + ins("develop and deliver", "Sarah Chen", "2024-01-20T09:00:00Z", 2)
+        + run(
+            " a custom inventory management software system (the \u201cSoftware\u201d) "
+            "for Client\u2019s warehouse operations across its three (3) distribution "
+            "centres located in Newark (NJ), Columbus (OH), and Atlanta (GA). "
+            "The Software shall integrate with Client\u2019s existing SAP ERP platform "
+            "(version 4.7) via REST API and shall support a minimum of 500 concurrent "
+            "users with a page-load response time not exceeding 2\u00a0seconds under "
+            "normal operating conditions. "
+        )
         + cstart(2)
-        + run("Service Provider shall provide all necessary personnel, equipment, "
-              "and resources required to complete the Services.")
-        + cend(2) + cref(2),
+        + run(
+            "Service Provider shall provide all necessary personnel, equipment, "
+            "and resources required to complete the Services."
+        )
+        + cend(2)
+        + cref(2),
         pid="10000003",
     )
     body += blank()
@@ -416,17 +454,21 @@ def make_services_agreement() -> None:
     body += move_from_block(
         heading("2.  DELIVERABLES", pid="10000004")
         + para(
-            run("Service Provider shall deliver the Software in three (3) phases "
+            run(
+                "Service Provider shall deliver the Software in three (3) phases "
                 "as set out in the project schedule attached as Exhibit\u00a0B. "
                 "Phase\u00a01 (Requirements & Architecture) shall be completed by "
                 "March 31, 2024; Phase\u00a02 (Development & Integration) by "
                 "June 30, 2024; Phase\u00a03 (UAT & Go-Live) by September 30, 2024. "
                 "Each phase shall conclude with a written acceptance sign-off from "
                 "Client within ten (10) business days of delivery. Failure to provide "
-                "written rejection within that period shall constitute deemed acceptance."),
+                "written rejection within that period shall constitute deemed acceptance."
+            ),
             pid="10000005",
         ),
-        "Marcus Webb", "2024-01-25T14:00:00Z", 3,
+        "Marcus Webb",
+        "2024-01-25T14:00:00Z",
+        3,
     )
     body += blank()
 
@@ -434,21 +476,28 @@ def make_services_agreement() -> None:
     body += heading("2.  FEE SCHEDULE", pid="10000006")
     body += para(
         cstart(16)
-        + run("The fixed fee of USD\u00a0150,000 is payable in three (3) milestone "
-              "instalments as follows:")
-        + cend(16) + cref(16),
+        + run(
+            "The fixed fee of USD\u00a0150,000 is payable in three (3) milestone "
+            "instalments as follows:"
+        )
+        + cend(16)
+        + cref(16),
         pid="10000007",
     )
     body += para(
-        run("Phase\u00a01 — Requirements & Architecture: USD\u00a045,000, due within "
+        run(
+            "Phase\u00a01 — Requirements & Architecture: USD\u00a045,000, due within "
             "fifteen (15) calendar days of Client\u2019s written acceptance of the "
-            "Phase\u00a01 deliverables."),
+            "Phase\u00a01 deliverables."
+        ),
         pid="10000008",
     )
     body += para(
-        run("Phase\u00a02 — Development & Integration: USD\u00a060,000, due within "
+        run(
+            "Phase\u00a02 — Development & Integration: USD\u00a060,000, due within "
             "fifteen (15) calendar days of Client\u2019s written acceptance of the "
-            "Phase\u00a02 deliverables."),
+            "Phase\u00a02 deliverables."
+        ),
         pid="10000009",
     )
     body += para(
@@ -456,19 +505,24 @@ def make_services_agreement() -> None:
         + del_("USD\u00a050,000", "Sarah Chen", "2024-01-28T10:00:00Z", 20)
         + cstart(17)
         + ins("USD\u00a045,000", "Sarah Chen", "2024-01-28T10:00:00Z", 21)
-        + cend(17) + crefs(17, 18, 19)
-        + run(", due within fifteen (15) calendar days of Client\u2019s written "
-              "acceptance of the final deliverables and successful completion of "
-              "user acceptance testing (\u201cUAT\u201d)."),
+        + cend(17)
+        + crefs(17, 18, 19)
+        + run(
+            ", due within fifteen (15) calendar days of Client\u2019s written "
+            "acceptance of the final deliverables and successful completion of "
+            "user acceptance testing (\u201cUAT\u201d)."
+        ),
         pid="1000000A",
     )
     body += para(
-        run("In addition to the fixed fee, Client shall pay Service Provider a "
+        run(
+            "In addition to the fixed fee, Client shall pay Service Provider a "
             "monthly support retainer of USD\u00a08,500 per month for a period of "
             "twelve (12) months following the Go-Live date (total support fee: "
             "USD\u00a0102,000). The retainer covers up to forty (40) hours of "
             "maintenance, bug-fixes, and minor enhancements per month. Hours in "
-            "excess of forty (40) shall be billed at USD\u00a0175 per hour."),
+            "excess of forty (40) shall be billed at USD\u00a0175 per hour."
+        ),
         pid="1000000B",
     )
     body += blank()
@@ -476,17 +530,21 @@ def make_services_agreement() -> None:
     # ── MOVE 2: Data Protection para — MOVED FROM HERE ───────────────────────
     body += move_from_block(
         para(
-            run("Service Provider shall implement and maintain appropriate technical "
+            run(
+                "Service Provider shall implement and maintain appropriate technical "
                 "and organisational measures to protect Client\u2019s data processed "
                 "under this Agreement, including at minimum: AES-256 encryption at "
                 "rest and in transit; role-based access controls; annual penetration "
                 "testing by a qualified third party; and incident response procedures "
                 "capable of notifying Client within 72\u00a0hours of discovery of any "
                 "personal data breach. Service Provider shall not transfer Client data "
-                "outside the United States without Client\u2019s prior written consent."),
+                "outside the United States without Client\u2019s prior written consent."
+            ),
             pid="1000000C",
         ),
-        "Sarah Chen", "2024-02-20T11:00:00Z", 4,
+        "Sarah Chen",
+        "2024-02-20T11:00:00Z",
+        4,
     )
     body += blank()
 
@@ -494,21 +552,22 @@ def make_services_agreement() -> None:
     body += heading("3.  PAYMENT TERMS", pid="1000000D")
     body += para(
         run("Client shall pay Service Provider\u2019s invoices within ")
-        + del_("forty-five (45) business",
-               "Sarah Chen", "2024-01-22T14:00:00Z", 5)
+        + del_("forty-five (45) business", "Sarah Chen", "2024-01-22T14:00:00Z", 5)
         + ins(" ", "Sarah Chen", "2024-01-22T14:00:00Z", 6)
         + cstart(3)
-        + ins("thirty (30) calendar",
-              "Sarah Chen", "2024-01-22T14:00:00Z", 7)
-        + cend(3) + crefs(3, 4, 5)
-        + run(" days of receipt of a valid invoice. Late payments shall accrue "
-              "interest at the rate of 1.5\u00a0% per month (18\u00a0% per annum) "
-              "on the outstanding balance from the due date until the date of actual "
-              "payment. Service Provider may suspend performance on five (5) business "
-              "days\u2019 written notice if any invoice exceeding USD\u00a05,000 "
-              "remains unpaid after its due date. All fees are exclusive of applicable "
-              "sales, use, or value-added taxes, which shall be borne by Client. "
-              "Invoices shall be submitted electronically to accounts.payable@acmecorp.com."),
+        + ins("thirty (30) calendar", "Sarah Chen", "2024-01-22T14:00:00Z", 7)
+        + cend(3)
+        + crefs(3, 4, 5)
+        + run(
+            " days of receipt of a valid invoice. Late payments shall accrue "
+            "interest at the rate of 1.5\u00a0% per month (18\u00a0% per annum) "
+            "on the outstanding balance from the due date until the date of actual "
+            "payment. Service Provider may suspend performance on five (5) business "
+            "days\u2019 written notice if any invoice exceeding USD\u00a05,000 "
+            "remains unpaid after its due date. All fees are exclusive of applicable "
+            "sales, use, or value-added taxes, which shall be borne by Client. "
+            "Invoices shall be submitted electronically to accounts.payable@acmecorp.com."
+        ),
         pid="1000000E",
     )
     body += blank()
@@ -516,20 +575,23 @@ def make_services_agreement() -> None:
     # ── §4 INTELLECTUAL PROPERTY  [TC 8/9/10; C6/C7] ────────────────────────
     body += heading("4.  INTELLECTUAL PROPERTY", pid="1000000F")
     body += para(
-        run("All intellectual property rights in any work product, deliverables, "
+        run(
+            "All intellectual property rights in any work product, deliverables, "
             "source code, documentation, or software created by Service Provider "
-            "specifically for Client under this Agreement shall vest ")
-        + del_("jointly in both parties",
-               "Sarah Chen", "2024-01-20T09:00:00Z", 8)
+            "specifically for Client under this Agreement shall vest "
+        )
+        + del_("jointly in both parties", "Sarah Chen", "2024-01-20T09:00:00Z", 8)
         + cstart(6)
-        + ins("solely in Client",
-              "Sarah Chen", "2024-01-20T09:00:00Z", 9)
-        + cend(6) + crefs(6, 7)
-        + run(" upon receipt of full payment of all outstanding invoices. Service "
-              "Provider hereby assigns, and agrees to cause its personnel to assign, "
-              "all such intellectual property rights to Client and shall execute any "
-              "documents necessary to perfect that assignment, including any patent "
-              "assignment deeds and copyright transfer instruments."),
+        + ins("solely in Client", "Sarah Chen", "2024-01-20T09:00:00Z", 9)
+        + cend(6)
+        + crefs(6, 7)
+        + run(
+            " upon receipt of full payment of all outstanding invoices. Service "
+            "Provider hereby assigns, and agrees to cause its personnel to assign, "
+            "all such intellectual property rights to Client and shall execute any "
+            "documents necessary to perfect that assignment, including any patent "
+            "assignment deeds and copyright transfer instruments."
+        ),
         pid="10000010",
     )
     # IP carve-out paragraph inserted by Marcus [TC 10]
@@ -542,7 +604,9 @@ def make_services_agreement() -> None:
             "Background IP is set out in Exhibit\u00a0C. Client is granted a perpetual, "
             "non-exclusive, royalty-free licence to use Background IP solely to the "
             "extent embedded in or necessary to operate the deliverables.",
-            "Marcus Webb", "2024-01-24T11:30:00Z", 10,
+            "Marcus Webb",
+            "2024-01-24T11:30:00Z",
+            10,
         ),
         pid="10000011",
     )
@@ -551,23 +615,28 @@ def make_services_agreement() -> None:
     # ── §5 WARRANTIES  [TC 15/16; C20/C21] ───────────────────────────────────
     body += heading("5.  WARRANTIES", pid="10000012")
     body += para(
-        run("Service Provider warrants that: (a)\u00a0the Software will perform "
+        run(
+            "Service Provider warrants that: (a)\u00a0the Software will perform "
             "materially in accordance with the functional specifications in Exhibit\u00a0A "
-            "for a period of ")
+            "for a period of "
+        )
         + del_("twelve (12) months", "Marcus Webb", "2024-02-08T10:00:00Z", 15)
         + cstart(20)
         + ins("six (6) months", "Marcus Webb", "2024-02-08T10:00:00Z", 16)
-        + cend(20) + crefs(20, 21)
-        + run(" following Go-Live (\u201cWarranty Period\u201d); "
-              "(b)\u00a0the Software will not contain any malicious code, viruses, "
-              "or undisclosed disabling mechanisms; (c)\u00a0Service Provider has "
-              "full right and authority to enter into this Agreement and to grant "
-              "the rights granted herein; and (d)\u00a0the Software, when delivered, "
-              "will not infringe any third-party intellectual property rights. During "
-              "the Warranty Period, Service Provider shall remedy any material defect "
-              "within ten (10) business days of written notice at no additional charge. "
-              "EXCEPT AS SET OUT IN THIS SECTION, THE SOFTWARE IS PROVIDED \u201cAS "
-              "IS\u201d AND ALL OTHER WARRANTIES ARE DISCLAIMED."),
+        + cend(20)
+        + crefs(20, 21)
+        + run(
+            " following Go-Live (\u201cWarranty Period\u201d); "
+            "(b)\u00a0the Software will not contain any malicious code, viruses, "
+            "or undisclosed disabling mechanisms; (c)\u00a0Service Provider has "
+            "full right and authority to enter into this Agreement and to grant "
+            "the rights granted herein; and (d)\u00a0the Software, when delivered, "
+            "will not infringe any third-party intellectual property rights. During "
+            "the Warranty Period, Service Provider shall remedy any material defect "
+            "within ten (10) business days of written notice at no additional charge. "
+            "EXCEPT AS SET OUT IN THIS SECTION, THE SOFTWARE IS PROVIDED \u201cAS "
+            "IS\u201d AND ALL OTHER WARRANTIES ARE DISCLAIMED."
+        ),
         pid="10000013",
     )
     body += blank()
@@ -575,22 +644,27 @@ def make_services_agreement() -> None:
     # ── §6 LIMITATION OF LIABILITY  [TC 17/18; C22/C23/C24] ─────────────────
     body += heading("6.  LIMITATION OF LIABILITY", pid="10000014")
     body += para(
-        run("TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEITHER PARTY "
+        run(
+            "TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEITHER PARTY "
             "SHALL BE LIABLE TO THE OTHER FOR ANY INDIRECT, INCIDENTAL, SPECIAL, "
             "PUNITIVE, OR CONSEQUENTIAL DAMAGES, INCLUDING LOSS OF PROFITS, LOSS "
             "OF DATA, OR LOSS OF BUSINESS, EVEN IF ADVISED OF THE POSSIBILITY OF "
             "SUCH DAMAGES. IN NO EVENT SHALL SERVICE PROVIDER\u2019S AGGREGATE "
             "LIABILITY UNDER OR RELATING TO THIS AGREEMENT EXCEED THE GREATER OF "
-            "(A)\u00a0")
+            "(A)\u00a0"
+        )
         + del_("USD\u00a01,000,000", "Marcus Webb", "2024-02-15T09:00:00Z", 17)
         + cstart(22)
         + ins("USD\u00a0500,000", "Marcus Webb", "2024-02-15T09:00:00Z", 18)
-        + cend(22) + crefs(22, 23, 24)
-        + run(" OR (B)\u00a0THE TOTAL FEES ACTUALLY PAID BY CLIENT TO SERVICE "
-              "PROVIDER IN THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE EVENT "
-              "GIVING RISE TO THE CLAIM. THE PARTIES ACKNOWLEDGE THAT THESE "
-              "LIMITATIONS REFLECT A REASONABLE ALLOCATION OF RISK AND FORM AN "
-              "ESSENTIAL BASIS OF THE BARGAIN BETWEEN THEM."),
+        + cend(22)
+        + crefs(22, 23, 24)
+        + run(
+            " OR (B)\u00a0THE TOTAL FEES ACTUALLY PAID BY CLIENT TO SERVICE "
+            "PROVIDER IN THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE EVENT "
+            "GIVING RISE TO THE CLAIM. THE PARTIES ACKNOWLEDGE THAT THESE "
+            "LIMITATIONS REFLECT A REASONABLE ALLOCATION OF RISK AND FORM AN "
+            "ESSENTIAL BASIS OF THE BARGAIN BETWEEN THEM."
+        ),
         pid="10000015",
     )
     body += blank()
@@ -598,21 +672,25 @@ def make_services_agreement() -> None:
     # ── §7 INDEMNIFICATION  [TC 19] ───────────────────────────────────────────
     body += heading("7.  INDEMNIFICATION", pid="10000016")
     body += para(
-        run("Each party (\u201cIndemnifying Party\u201d) shall indemnify, defend, "
+        run(
+            "Each party (\u201cIndemnifying Party\u201d) shall indemnify, defend, "
             "and hold harmless the other party and its officers, directors, employees, "
             "and agents (\u201cIndemnified Parties\u201d) from and against any "
             "third-party claims, damages, losses, and expenses (including reasonable "
             "legal fees) arising out of or relating to: (a)\u00a0the Indemnifying "
             "Party\u2019s breach of any representation, warranty, or obligation under "
             "this Agreement; or (b)\u00a0the Indemnifying Party\u2019s gross negligence "
-            "or wilful misconduct. ")
+            "or wilful misconduct. "
+        )
         + ins(
             "Notwithstanding the foregoing, Service Provider\u2019s indemnification "
             "obligation shall not apply to any claim arising from Client\u2019s "
             "modification of the Software without Service Provider\u2019s prior "
             "written approval, or from Client\u2019s use of the Software in a manner "
             "not contemplated by the technical specifications in Exhibit\u00a0A.",
-            "Sarah Chen", "2024-02-20T14:00:00Z", 19,
+            "Sarah Chen",
+            "2024-02-20T14:00:00Z",
+            19,
         ),
         pid="10000017",
     )
@@ -621,25 +699,30 @@ def make_services_agreement() -> None:
     # ── §8 CONFIDENTIALITY  [TC 11/12; C8/C9] ────────────────────────────────
     body += heading("8.  CONFIDENTIALITY", pid="10000018")
     body += para(
-        run("Each party (\u201cReceiving Party\u201d) agrees to hold in strict "
+        run(
+            "Each party (\u201cReceiving Party\u201d) agrees to hold in strict "
             "confidence all non-public, proprietary information of the other party "
             "(\u201cDisclosing Party\u201d) disclosed in connection with this "
             "Agreement (\u201cConfidential Information\u201d) and to use such "
             "information solely for performing its obligations or exercising its "
             "rights hereunder. This obligation shall survive termination for a "
-            "period of ")
+            "period of "
+        )
         + del_("five (5)", "Marcus Webb", "2024-02-01T10:00:00Z", 11)
         + cstart(8)
         + ins("two (2)", "Marcus Webb", "2024-02-01T10:00:00Z", 12)
-        + cend(8) + crefs(8, 9)
-        + run(" years. Confidential Information does not include information that: "
-              "(i)\u00a0is or becomes publicly available through no fault of the "
-              "Receiving Party; (ii)\u00a0was rightfully known to the Receiving Party "
-              "before disclosure; (iii)\u00a0is independently developed by the "
-              "Receiving Party without reference to the Confidential Information; or "
-              "(iv)\u00a0is required to be disclosed by applicable law or court order, "
-              "provided the Receiving Party gives prompt written notice to the "
-              "Disclosing Party and cooperates in seeking a protective order."),
+        + cend(8)
+        + crefs(8, 9)
+        + run(
+            " years. Confidential Information does not include information that: "
+            "(i)\u00a0is or becomes publicly available through no fault of the "
+            "Receiving Party; (ii)\u00a0was rightfully known to the Receiving Party "
+            "before disclosure; (iii)\u00a0is independently developed by the "
+            "Receiving Party without reference to the Confidential Information; or "
+            "(iv)\u00a0is required to be disclosed by applicable law or court order, "
+            "provided the Receiving Party gives prompt written notice to the "
+            "Disclosing Party and cooperates in seeking a protective order."
+        ),
         pid="10000019",
     )
     body += blank()
@@ -647,25 +730,30 @@ def make_services_agreement() -> None:
     # ── §9 TERM AND TERMINATION  [TC 13/14; C10/C11/C12] ────────────────────
     body += heading("9.  TERM AND TERMINATION", pid="1000001A")
     body += para(
-        run("This Agreement commences on the Effective Date and continues until "
+        run(
+            "This Agreement commences on the Effective Date and continues until "
             "the later of: (a)\u00a0completion of all deliverables and acceptance "
             "by Client; or (b)\u00a0expiry of the support retainer period, unless "
             "terminated earlier pursuant to this Section. Either party may terminate "
-            "this Agreement for convenience upon ")
+            "this Agreement for convenience upon "
+        )
         + del_("ninety (90)", "Sarah Chen", "2024-02-03T09:00:00Z", 13)
         + cstart(10)
         + ins("thirty (30)", "Sarah Chen", "2024-02-03T09:00:00Z", 14)
-        + cend(10) + crefs(10, 11, 12)
-        + run(" days\u2019 prior written notice to the other party. Either party may "
-              "terminate immediately for cause upon written notice if the other party "
-              "commits a material breach and fails to cure such breach within fifteen "
-              "(15) business days of receiving written notice specifying the breach in "
-              "reasonable detail. Upon termination for any reason, each party shall "
-              "promptly return or destroy the other party\u2019s Confidential "
-              "Information and, upon request, certify such destruction in writing. "
-              "Sections 4 (Intellectual Property), 6 (Limitation of Liability), "
-              "7 (Indemnification), 8 (Confidentiality), and 10 (Governing Law) "
-              "shall survive termination."),
+        + cend(10)
+        + crefs(10, 11, 12)
+        + run(
+            " days\u2019 prior written notice to the other party. Either party may "
+            "terminate immediately for cause upon written notice if the other party "
+            "commits a material breach and fails to cure such breach within fifteen "
+            "(15) business days of receiving written notice specifying the breach in "
+            "reasonable detail. Upon termination for any reason, each party shall "
+            "promptly return or destroy the other party\u2019s Confidential "
+            "Information and, upon request, certify such destruction in writing. "
+            "Sections 4 (Intellectual Property), 6 (Limitation of Liability), "
+            "7 (Indemnification), 8 (Confidentiality), and 10 (Governing Law) "
+            "shall survive termination."
+        ),
         pid="1000001B",
     )
     body += blank()
@@ -673,17 +761,22 @@ def make_services_agreement() -> None:
     # ── §10 GOVERNING LAW  [C13/C14/C15] ─────────────────────────────────────
     body += heading("10.  GOVERNING LAW", pid="1000001C")
     body += para(
-        run("This Agreement shall be governed by and construed in accordance with "
-            "the laws of the ")
+        run(
+            "This Agreement shall be governed by and construed in accordance with "
+            "the laws of the "
+        )
         + cstart(13)
         + run("State of New York")
-        + cend(13) + crefs(13, 14, 15)
-        + run(", without regard to its conflict-of-laws principles. Each party "
-              "irrevocably submits to the exclusive jurisdiction of the state and "
-              "federal courts sitting in New York County, New York for the resolution "
-              "of any dispute arising under or relating to this Agreement. Process "
-              "may be served by any means authorised under the laws of the "
-              "State of New York."),
+        + cend(13)
+        + crefs(13, 14, 15)
+        + run(
+            ", without regard to its conflict-of-laws principles. Each party "
+            "irrevocably submits to the exclusive jurisdiction of the state and "
+            "federal courts sitting in New York County, New York for the resolution "
+            "of any dispute arising under or relating to this Agreement. Process "
+            "may be served by any means authorised under the laws of the "
+            "State of New York."
+        ),
         pid="1000001D",
     )
     body += blank()
@@ -692,17 +785,21 @@ def make_services_agreement() -> None:
     body += heading("11.  DELIVERABLES", pid="1000001E")
     body += move_to_block(
         para(
-            run("Service Provider shall deliver the Software in three (3) phases "
+            run(
+                "Service Provider shall deliver the Software in three (3) phases "
                 "as set out in the project schedule attached as Exhibit\u00a0B. "
                 "Phase\u00a01 (Requirements & Architecture) shall be completed by "
                 "March 31, 2024; Phase\u00a02 (Development & Integration) by "
                 "June 30, 2024; Phase\u00a03 (UAT & Go-Live) by September 30, 2024. "
                 "Each phase shall conclude with a written acceptance sign-off from "
                 "Client within ten (10) business days of delivery. Failure to provide "
-                "written rejection within that period shall constitute deemed acceptance."),
+                "written rejection within that period shall constitute deemed acceptance."
+            ),
             pid="1000001F",
         ),
-        "Marcus Webb", "2024-01-25T14:00:00Z", 3,
+        "Marcus Webb",
+        "2024-01-25T14:00:00Z",
+        3,
     )
     body += blank()
 
@@ -710,17 +807,21 @@ def make_services_agreement() -> None:
     body += heading("12.  DATA PROTECTION", pid="10000020")
     body += move_to_block(
         para(
-            run("Service Provider shall implement and maintain appropriate technical "
+            run(
+                "Service Provider shall implement and maintain appropriate technical "
                 "and organisational measures to protect Client\u2019s data processed "
                 "under this Agreement, including at minimum: AES-256 encryption at "
                 "rest and in transit; role-based access controls; annual penetration "
                 "testing by a qualified third party; and incident response procedures "
                 "capable of notifying Client within 72\u00a0hours of discovery of any "
                 "personal data breach. Service Provider shall not transfer Client data "
-                "outside the United States without Client\u2019s prior written consent."),
+                "outside the United States without Client\u2019s prior written consent."
+            ),
             pid="10000021",
         ),
-        "Sarah Chen", "2024-02-20T11:00:00Z", 4,
+        "Sarah Chen",
+        "2024-02-20T11:00:00Z",
+        4,
     )
     body += blank()
 
@@ -728,21 +829,24 @@ def make_services_agreement() -> None:
     body += heading("13.  GENERAL PROVISIONS", pid="10000022")
     body += para(
         cstart(25)
-        + run("This Agreement, together with all Exhibits, constitutes the entire "
-              "agreement between the Parties with respect to its subject matter and "
-              "supersedes all prior agreements, representations, and understandings "
-              "between the Parties, including the Letter of Intent dated December\u00a01, "
-              "2023. Any amendment must be in writing and signed by authorised "
-              "representatives of both Parties. If any provision is held invalid or "
-              "unenforceable, the remaining provisions shall continue in full force "
-              "and effect. Neither party may assign this Agreement without the other "
-              "party\u2019s prior written consent (not to be unreasonably withheld or "
-              "delayed), except that either party may assign to an affiliate or to a "
-              "successor in connection with a merger or acquisition of all or "
-              "substantially all of its assets. Notices under this Agreement shall be "
-              "in writing and delivered by email with read-receipt confirmation or "
-              "by overnight courier to the addresses set out in the signature block.")
-        + cend(25) + cref(25),
+        + run(
+            "This Agreement, together with all Exhibits, constitutes the entire "
+            "agreement between the Parties with respect to its subject matter and "
+            "supersedes all prior agreements, representations, and understandings "
+            "between the Parties, including the Letter of Intent dated December\u00a01, "
+            "2023. Any amendment must be in writing and signed by authorised "
+            "representatives of both Parties. If any provision is held invalid or "
+            "unenforceable, the remaining provisions shall continue in full force "
+            "and effect. Neither party may assign this Agreement without the other "
+            "party\u2019s prior written consent (not to be unreasonably withheld or "
+            "delayed), except that either party may assign to an affiliate or to a "
+            "successor in connection with a merger or acquisition of all or "
+            "substantially all of its assets. Notices under this Agreement shall be "
+            "in writing and delivered by email with read-receipt confirmation or "
+            "by overnight courier to the addresses set out in the signature block."
+        )
+        + cend(25)
+        + cref(25),
         pid="10000023",
     )
 
@@ -754,7 +858,10 @@ def make_services_agreement() -> None:
 
     # C1 standalone — effective date (Marcus, Jan 15, constructive)
     c += comment_xml(
-        1, "Marcus Webb", "2024-01-15T10:30:00Z", "MW",
+        1,
+        "Marcus Webb",
+        "2024-01-15T10:30:00Z",
+        "MW",
         "Quick process note \u2014 to confirm: the Effective Date is tied to the "
         "date of final countersignature by the last party to sign, not the calendar "
         "date written above? Acme\u2019s finance team flagged a discrepancy on this "
@@ -765,7 +872,10 @@ def make_services_agreement() -> None:
 
     # C2 standalone — necessary resources (Marcus, Jan 15, diplomatic)
     c += comment_xml(
-        2, "Marcus Webb", "2024-01-15T11:00:00Z", "MW",
+        2,
+        "Marcus Webb",
+        "2024-01-15T11:00:00Z",
+        "MW",
         "I\u2019d recommend we either define \u201cnecessary\u201d by reference to "
         "the staffing schedule in Exhibit\u00a0B, or add an explicit cost cap. "
         "As currently drafted this clause could be read as requiring Service Provider "
@@ -776,14 +886,20 @@ def make_services_agreement() -> None:
 
     # Thread A: payment terms (C3 root, C4 reply, C5 reply)
     c += comment_xml(
-        3, "Sarah Chen", "2024-01-22T14:00:00Z", "SC",
+        3,
+        "Sarah Chen",
+        "2024-01-22T14:00:00Z",
+        "SC",
         "Thirty days was expressly agreed in the LOI (paragraph 4) and is "
         "non-negotiable from Acme\u2019s side. I have updated the clause accordingly. "
         "Do not revert this.",
         "C0000003",
     )
     c += comment_xml(
-        4, "Marcus Webb", "2024-01-23T09:15:00Z", "MW",
+        4,
+        "Marcus Webb",
+        "2024-01-23T09:15:00Z",
+        "MW",
         "No objection to 30 days \u2014 understood and accepted. My only question: "
         "are these calendar days or business days? The LOI used the term "
         "\u201cdays\u201d without qualification. We are fine with calendar days "
@@ -791,7 +907,10 @@ def make_services_agreement() -> None:
         "C0000004",
     )
     c += comment_xml(
-        5, "Sarah Chen", "2024-01-23T10:00:00Z", "SC",
+        5,
+        "Sarah Chen",
+        "2024-01-23T10:00:00Z",
+        "SC",
         "Calendar days, confirmed. I have added \u201ccalendar\u201d to the clause. "
         "This point is closed.",
         "C0000005",
@@ -799,7 +918,10 @@ def make_services_agreement() -> None:
 
     # Thread B: IP ownership (C6 root, C7 reply)
     c += comment_xml(
-        6, "Sarah Chen", "2024-01-20T09:00:00Z", "SC",
+        6,
+        "Sarah Chen",
+        "2024-01-20T09:00:00Z",
+        "SC",
         "This MUST read \u201csolely in Client.\u201d Co-ownership is commercially "
         "unworkable \u2014 it prevents Client from licensing, enforcing, or "
         "sublicensing the Software without TechVenture\u2019s consent. This has "
@@ -808,7 +930,10 @@ def make_services_agreement() -> None:
         "C0000006",
     )
     c += comment_xml(
-        7, "Marcus Webb", "2024-01-24T11:30:00Z", "MW",
+        7,
+        "Marcus Webb",
+        "2024-01-24T11:30:00Z",
+        "MW",
         "We understand Acme\u2019s position but a blanket assignment of \u201call IP\u201d "
         "is not acceptable. TechVenture has 12\u00a0years of proprietary algorithms, "
         "ML models, and tooling baked into everything we ship. I have inserted a "
@@ -820,7 +945,10 @@ def make_services_agreement() -> None:
 
     # Thread C: confidentiality (C8 root, C9 reply)
     c += comment_xml(
-        8, "Jennifer Park", "2024-02-01T16:00:00Z", "JP",
+        8,
+        "Jennifer Park",
+        "2024-02-01T16:00:00Z",
+        "JP",
         "Should this be longer? Our standard template uses five years for software "
         "development agreements, particularly where the contractor has access to our "
         "warehouse throughput and inventory data. I want to make sure we are protected "
@@ -828,7 +956,10 @@ def make_services_agreement() -> None:
         "C0000008",
     )
     c += comment_xml(
-        9, "Sarah Chen", "2024-02-02T09:30:00Z", "SC",
+        9,
+        "Sarah Chen",
+        "2024-02-02T09:30:00Z",
+        "SC",
         "Jennifer \u2014 good instinct but getting to five years would be a hard "
         "negotiation. Two years was already a concession from their original ask of "
         "one year. We also have the non-compete in Schedule\u00a0C covering the top "
@@ -839,7 +970,10 @@ def make_services_agreement() -> None:
 
     # Thread D: termination notice (C10 root, C11 reply, C12 reply)
     c += comment_xml(
-        10, "David Okafor", "2024-02-03T08:45:00Z", "DO",
+        10,
+        "David Okafor",
+        "2024-02-03T08:45:00Z",
+        "DO",
         "Thirty days is completely unworkable for TechVenture. We have three "
         "active subcontractors on this project (UI/UX, QA, DevOps), infrastructure "
         "commitments totalling USD\u00a034,000 per month, and a six-week minimum "
@@ -848,7 +982,10 @@ def make_services_agreement() -> None:
         "C000000A",
     )
     c += comment_xml(
-        11, "Sarah Chen", "2024-02-05T10:00:00Z", "SC",
+        11,
+        "Sarah Chen",
+        "2024-02-05T10:00:00Z",
+        "SC",
         "David, we appreciate the transparency on the operational constraints. "
         "Acme is prepared to move to sixty (60) days as a compromise position. "
         "This is consistent with industry standard for contracts of this size "
@@ -858,7 +995,10 @@ def make_services_agreement() -> None:
         "C000000B",
     )
     c += comment_xml(
-        12, "David Okafor", "2024-02-06T08:00:00Z", "DO",
+        12,
+        "David Okafor",
+        "2024-02-06T08:00:00Z",
+        "DO",
         "Sixty days works for TechVenture. Agreed, subject to all remaining "
         "open points being resolved satisfactorily.",
         "C000000C",
@@ -866,7 +1006,10 @@ def make_services_agreement() -> None:
 
     # Thread E: governing law (C13 root, C14 reply, C15 reply)
     c += comment_xml(
-        13, "Marcus Webb", "2024-02-10T14:00:00Z", "MW",
+        13,
+        "Marcus Webb",
+        "2024-02-10T14:00:00Z",
+        "MW",
         "TechVenture is incorporated in Delaware and our external litigation counsel "
         "is based in San Francisco. New York law creates unnecessary cost and "
         "jurisdictional complexity for us in any dispute scenario. We would strongly "
@@ -875,14 +1018,20 @@ def make_services_agreement() -> None:
         "C000000D",
     )
     c += comment_xml(
-        14, "Sarah Chen", "2024-02-11T09:00:00Z", "SC",
+        14,
+        "Sarah Chen",
+        "2024-02-11T09:00:00Z",
+        "SC",
         "Acme\u2019s entire legal function runs on New York law. Our GC has final "
         "say on this and has said no. New York stays. This is not open for "
         "further discussion.",
         "C000000E",
     )
     c += comment_xml(
-        15, "Marcus Webb", "2024-02-12T10:30:00Z", "MW",
+        15,
+        "Marcus Webb",
+        "2024-02-12T10:30:00Z",
+        "MW",
         "Noted and accepted \u2014 TechVenture will accept New York governing law. "
         "However, we do require that any disputes be submitted to binding arbitration "
         "under AAA Commercial Arbitration Rules rather than court litigation. "
@@ -893,7 +1042,10 @@ def make_services_agreement() -> None:
 
     # C16 standalone — fee schedule total (Jennifer, Jan 16, constructive)
     c += comment_xml(
-        16, "Jennifer Park", "2024-01-16T09:00:00Z", "JP",
+        16,
+        "Jennifer Park",
+        "2024-01-16T09:00:00Z",
+        "JP",
         "The USD\u00a0150,000 fixed fee is in line with the budget approved by "
         "Acme\u2019s Finance Committee on January 10, 2024 (ref FC-2024-003). "
         "Just confirming the milestone split (45/60/45) is consistent with "
@@ -905,7 +1057,10 @@ def make_services_agreement() -> None:
 
     # Thread F: Phase 3 fee (C17 root, C18 reply, C19 reply)
     c += comment_xml(
-        17, "David Okafor", "2024-01-18T14:00:00Z", "DO",
+        17,
+        "David Okafor",
+        "2024-01-18T14:00:00Z",
+        "DO",
         "We agreed USD\u00a050,000 for Phase\u00a03 on the December 14 call. "
         "Reducing it to USD\u00a045,000 now is a unilateral change to a deal "
         "term that was already settled. The total fixed fee drops from "
@@ -914,7 +1069,10 @@ def make_services_agreement() -> None:
         "C0000011",
     )
     c += comment_xml(
-        18, "Sarah Chen", "2024-01-19T09:30:00Z", "SC",
+        18,
+        "Sarah Chen",
+        "2024-01-19T09:30:00Z",
+        "SC",
         "David \u2014 the December 14 call summary (attached) records the Phase\u00a03 "
         "fee as \u201cto be confirmed\u201d pending scope finalisation. The reduction "
         "reflects the descoping of the mobile app component agreed on January 8. "
@@ -923,7 +1081,10 @@ def make_services_agreement() -> None:
         "C0000012",
     )
     c += comment_xml(
-        19, "Marcus Webb", "2024-01-20T08:00:00Z", "MW",
+        19,
+        "Marcus Webb",
+        "2024-01-20T08:00:00Z",
+        "MW",
         "Having reviewed the December 14 notes I believe there is a genuine "
         "misunderstanding on both sides. To move things forward: TechVenture will "
         "accept USD\u00a045,000 for Phase\u00a03 on the condition that Phase\u00a02 "
@@ -934,7 +1095,10 @@ def make_services_agreement() -> None:
 
     # Thread G: warranty period (C20 root, C21 reply)
     c += comment_xml(
-        20, "Sarah Chen", "2024-02-08T11:00:00Z", "SC",
+        20,
+        "Sarah Chen",
+        "2024-02-08T11:00:00Z",
+        "SC",
         "Six months is dangerously short for an ERP integration of this complexity. "
         "Latent defects in warehouse management software can take six to nine months "
         "to surface in production. Acme\u2019s standard for custom software is "
@@ -942,7 +1106,10 @@ def make_services_agreement() -> None:
         "C0000014",
     )
     c += comment_xml(
-        21, "Marcus Webb", "2024-02-09T09:00:00Z", "MW",
+        21,
+        "Marcus Webb",
+        "2024-02-09T09:00:00Z",
+        "MW",
         "Sarah, we understand the concern. Our reasoning: the UAT period under "
         "Phase\u00a03 already provides a structured acceptance window, and post "
         "go-live the support retainer (12 months, USD\u00a0102,000) covers bug-fixes "
@@ -954,7 +1121,10 @@ def make_services_agreement() -> None:
 
     # Thread H: liability cap (C22 root, C23 reply, C24 reply)
     c += comment_xml(
-        22, "Sarah Chen", "2024-02-15T10:00:00Z", "SC",
+        22,
+        "Sarah Chen",
+        "2024-02-15T10:00:00Z",
+        "SC",
         "USD\u00a0500,000 is completely inadequate. The contract value alone is "
         "USD\u00a0252,000 (USD\u00a0150,000 fixed + USD\u00a0102,000 retainer). "
         "If the Software fails in production across three distribution centres we "
@@ -963,7 +1133,10 @@ def make_services_agreement() -> None:
         "C0000016",
     )
     c += comment_xml(
-        23, "Marcus Webb", "2024-02-16T09:15:00Z", "MW",
+        23,
+        "Marcus Webb",
+        "2024-02-16T09:15:00Z",
+        "MW",
         "Sarah, a USD\u00a01,000,000 cap on a USD\u00a0150,000 fixed-fee engagement "
         "is a 6.7\u00d7 multiplier \u2014 that is not a commercially rational risk "
         "allocation for a software vendor. USD\u00a0500,000 equals 3.3\u00d7 the "
@@ -972,7 +1145,10 @@ def make_services_agreement() -> None:
         "C0000017",
     )
     c += comment_xml(
-        24, "David Okafor", "2024-02-17T08:30:00Z", "DO",
+        24,
+        "David Okafor",
+        "2024-02-17T08:30:00Z",
+        "DO",
         "To add context: TechVenture carries USD\u00a01,000,000 in professional "
         "indemnity cover but half of that is already committed to two other active "
         "engagements. USD\u00a0500,000 is the hard ceiling from our insurer's "
@@ -982,7 +1158,10 @@ def make_services_agreement() -> None:
 
     # C25 standalone — sign-off (Jennifer, Feb 22, constructive)
     c += comment_xml(
-        25, "Jennifer Park", "2024-02-22T17:00:00Z", "JP",
+        25,
+        "Jennifer Park",
+        "2024-02-22T17:00:00Z",
+        "JP",
         "From Acme\u2019s engineering side: all substantive points are now resolved "
         "to my satisfaction. The milestone dates in Exhibit\u00a0B align with our "
         "Q3 go-live target for the Newark pilot. Sarah \u2014 please confirm from "
@@ -996,49 +1175,72 @@ def make_services_agreement() -> None:
     # ── commentsExtended ──────────────────────────────────────────────────────
 
     ex = ""
-    ex += comment_ex("C0000001")                                       # C1 standalone
-    ex += comment_ex("C0000002")                                       # C2 standalone
-    ex += comment_ex("C0000003")                                       # Thread A root
-    ex += comment_ex("C0000004", parent_para_id="C0000003")            # A reply
-    ex += comment_ex("C0000005", parent_para_id="C0000003")            # A reply
-    ex += comment_ex("C0000006")                                       # Thread B root
-    ex += comment_ex("C0000007", parent_para_id="C0000006")            # B reply
-    ex += comment_ex("C0000008")                                       # Thread C root
-    ex += comment_ex("C0000009", parent_para_id="C0000008")            # C reply
-    ex += comment_ex("C000000A")                                       # Thread D root
-    ex += comment_ex("C000000B", parent_para_id="C000000A")            # D reply
-    ex += comment_ex("C000000C", parent_para_id="C000000A")            # D reply
-    ex += comment_ex("C000000D")                                       # Thread E root
-    ex += comment_ex("C000000E", parent_para_id="C000000D")            # E reply
-    ex += comment_ex("C000000F", parent_para_id="C000000D")            # E reply
-    ex += comment_ex("C0000010")                                       # C16 standalone
-    ex += comment_ex("C0000011")                                       # Thread F root
-    ex += comment_ex("C0000012", parent_para_id="C0000011")            # F reply
-    ex += comment_ex("C0000013", parent_para_id="C0000011")            # F reply
-    ex += comment_ex("C0000014")                                       # Thread G root
-    ex += comment_ex("C0000015", parent_para_id="C0000014")            # G reply
-    ex += comment_ex("C0000016")                                       # Thread H root
-    ex += comment_ex("C0000017", parent_para_id="C0000016")            # H reply
-    ex += comment_ex("C0000018", parent_para_id="C0000016")            # H reply
-    ex += comment_ex("C0000019")                                       # C25 standalone
+    ex += comment_ex("C0000001")  # C1 standalone
+    ex += comment_ex("C0000002")  # C2 standalone
+    ex += comment_ex("C0000003")  # Thread A root
+    ex += comment_ex("C0000004", parent_para_id="C0000003")  # A reply
+    ex += comment_ex("C0000005", parent_para_id="C0000003")  # A reply
+    ex += comment_ex("C0000006")  # Thread B root
+    ex += comment_ex("C0000007", parent_para_id="C0000006")  # B reply
+    ex += comment_ex("C0000008")  # Thread C root
+    ex += comment_ex("C0000009", parent_para_id="C0000008")  # C reply
+    ex += comment_ex("C000000A")  # Thread D root
+    ex += comment_ex("C000000B", parent_para_id="C000000A")  # D reply
+    ex += comment_ex("C000000C", parent_para_id="C000000A")  # D reply
+    ex += comment_ex("C000000D")  # Thread E root
+    ex += comment_ex("C000000E", parent_para_id="C000000D")  # E reply
+    ex += comment_ex("C000000F", parent_para_id="C000000D")  # E reply
+    ex += comment_ex("C0000010")  # C16 standalone
+    ex += comment_ex("C0000011")  # Thread F root
+    ex += comment_ex("C0000012", parent_para_id="C0000011")  # F reply
+    ex += comment_ex("C0000013", parent_para_id="C0000011")  # F reply
+    ex += comment_ex("C0000014")  # Thread G root
+    ex += comment_ex("C0000015", parent_para_id="C0000014")  # G reply
+    ex += comment_ex("C0000016")  # Thread H root
+    ex += comment_ex("C0000017", parent_para_id="C0000016")  # H reply
+    ex += comment_ex("C0000018", parent_para_id="C0000016")  # H reply
+    ex += comment_ex("C0000019")  # C25 standalone
 
     comments_extended_xml = wrap_comments_extended(ex)
 
     # ── commentsIds ───────────────────────────────────────────────────────────
 
     para_ids = [
-        "C0000001","C0000002","C0000003","C0000004","C0000005",
-        "C0000006","C0000007","C0000008","C0000009","C000000A",
-        "C000000B","C000000C","C000000D","C000000E","C000000F",
-        "C0000010","C0000011","C0000012","C0000013","C0000014",
-        "C0000015","C0000016","C0000017","C0000018","C0000019",
+        "C0000001",
+        "C0000002",
+        "C0000003",
+        "C0000004",
+        "C0000005",
+        "C0000006",
+        "C0000007",
+        "C0000008",
+        "C0000009",
+        "C000000A",
+        "C000000B",
+        "C000000C",
+        "C000000D",
+        "C000000E",
+        "C000000F",
+        "C0000010",
+        "C0000011",
+        "C0000012",
+        "C0000013",
+        "C0000014",
+        "C0000015",
+        "C0000016",
+        "C0000017",
+        "C0000018",
+        "C0000019",
     ]
     ids = "".join(comment_id_entry(pid, i) for i, pid in enumerate(para_ids, start=1))
     comments_ids_xml = wrap_comments_ids(ids)
 
     write_docx(
         os.path.join(OUTPUT_DIR, "services_agreement.docx"),
-        document_xml, comments_xml, comments_extended_xml, comments_ids_xml,
+        document_xml,
+        comments_xml,
+        comments_extended_xml,
+        comments_ids_xml,
     )
 
 
@@ -1078,6 +1280,7 @@ def make_services_agreement() -> None:
 #   D15  Diane  / Apr 10 — final sign-off from Meridian (reply E, constructive)
 # ===========================================================================
 
+
 def make_nda() -> None:
 
     body = ""
@@ -1088,7 +1291,8 @@ def make_nda() -> None:
 
     # ── Preamble ──────────────────────────────────────────────────────────────
     body += para(
-        run("This Mutual Non-Disclosure Agreement (\u201cAgreement\u201d) is entered "
+        run(
+            "This Mutual Non-Disclosure Agreement (\u201cAgreement\u201d) is entered "
             "into as of March 1, 2024 (the \u201cEffective Date\u201d), between "
             "Meridian Capital Partners LP, a Delaware limited partnership with its "
             "principal place of business at 200 Park Avenue, New York, NY 10166 "
@@ -1099,7 +1303,8 @@ def make_nda() -> None:
             "USD\u00a05,000,000 (the \u201cProposed Transaction\u201d) and wish to "
             "protect confidential information exchanged in that context. "
             "The Parties are hereinafter referred to collectively as the "
-            "\u201cParties\u201d and individually as a \u201cParty.\u201d"),
+            "\u201cParties\u201d and individually as a \u201cParty.\u201d"
+        ),
         pid="20000001",
     )
     body += blank()
@@ -1112,7 +1317,9 @@ def make_nda() -> None:
             "any and all information, whether written, oral, electronic, or in "
             "any other form, that is disclosed by one party (the \u201cDisclosing "
             "Party\u201d) to the other (the \u201cReceiving Party\u201d)",
-            "Tom Reilly", "2024-03-05T10:00:00Z", 1,
+            "Tom Reilly",
+            "2024-03-05T10:00:00Z",
+            1,
         )
         + cstart(1)
         + ins(
@@ -1122,20 +1329,25 @@ def make_nda() -> None:
             "identified as confidential at the time of disclosure and confirmed in "
             "a written summary delivered to the Receiving Party within five (5) "
             "business days thereafter",
-            "Tom Reilly", "2024-03-05T10:00:00Z", 2,
+            "Tom Reilly",
+            "2024-03-05T10:00:00Z",
+            2,
         )
-        + cend(1) + crefs(1, 2, 3)
-        + run(" and that relates to the Disclosing Party\u2019s business, "
-              "technology, financial information, genomics pipeline data, "
-              "clinical trial data, intellectual property, or strategic plans "
-              "(\u201cConfidential Information\u201d). Confidential Information "
-              "does not include information that: (i)\u00a0is or becomes publicly "
-              "known through no fault of the Receiving Party; (ii)\u00a0was already "
-              "known to the Receiving Party prior to disclosure, as evidenced by "
-              "written records predating disclosure; (iii)\u00a0is independently "
-              "developed by the Receiving Party without reference to the Confidential "
-              "Information; or (iv)\u00a0is received from a third party without "
-              "restriction and without breach of any obligation of confidentiality."),
+        + cend(1)
+        + crefs(1, 2, 3)
+        + run(
+            " and that relates to the Disclosing Party\u2019s business, "
+            "technology, financial information, genomics pipeline data, "
+            "clinical trial data, intellectual property, or strategic plans "
+            "(\u201cConfidential Information\u201d). Confidential Information "
+            "does not include information that: (i)\u00a0is or becomes publicly "
+            "known through no fault of the Receiving Party; (ii)\u00a0was already "
+            "known to the Receiving Party prior to disclosure, as evidenced by "
+            "written records predating disclosure; (iii)\u00a0is independently "
+            "developed by the Receiving Party without reference to the Confidential "
+            "Information; or (iv)\u00a0is received from a third party without "
+            "restriction and without breach of any obligation of confidentiality."
+        ),
         pid="20000003",
     )
     body += blank()
@@ -1143,7 +1355,8 @@ def make_nda() -> None:
     # ── §2 OBLIGATIONS  [TC 3 inserted; MOVE from here: compelled disclosure; D6/D7] ──
     body += heading("2.  OBLIGATIONS OF RECEIVING PARTY", pid="20000004")
     body += para(
-        run("The Receiving Party shall: (a)\u00a0hold all Confidential Information "
+        run(
+            "The Receiving Party shall: (a)\u00a0hold all Confidential Information "
             "in strict confidence, using at least the same degree of care it uses "
             "for its own confidential information of like nature, but in no event "
             "less than reasonable care; (b)\u00a0not disclose Confidential Information "
@@ -1151,7 +1364,8 @@ def make_nda() -> None:
             "Party; (c)\u00a0use Confidential Information solely for evaluating "
             "and consummating the Proposed Transaction; and (d)\u00a0promptly notify "
             "the Disclosing Party in writing upon discovery of any unauthorised use "
-            "or disclosure of Confidential Information."),
+            "or disclosure of Confidential Information."
+        ),
         pid="20000005",
     )
     # Permitted disclosure carve-out inserted by Tom [TC 3]
@@ -1165,25 +1379,32 @@ def make_nda() -> None:
             "by confidentiality obligations no less restrictive than those set out "
             "in this Agreement. The Receiving Party shall be responsible for any "
             "breach of this Agreement by its Authorised Recipients.",
-            "Tom Reilly", "2024-03-20T14:00:00Z", 3,
+            "Tom Reilly",
+            "2024-03-20T14:00:00Z",
+            3,
         )
-        + cend(6) + crefs(6, 7),
+        + cend(6)
+        + crefs(6, 7),
         pid="20000006",
     )
     # Compelled disclosure para — MOVED FROM HERE [MOVE: rid=4]
     body += move_from_block(
         para(
-            run("If the Receiving Party is required by applicable law, regulation, "
+            run(
+                "If the Receiving Party is required by applicable law, regulation, "
                 "or court order to disclose any Confidential Information, it shall: "
                 "(i)\u00a0give the Disclosing Party prompt written notice (where "
                 "legally permissible) to allow the Disclosing Party to seek a "
                 "protective order or other appropriate relief; (ii)\u00a0cooperate "
                 "reasonably with the Disclosing Party in connection with any such "
                 "effort; and (iii)\u00a0disclose only that portion of the Confidential "
-                "Information that is legally required to be disclosed."),
+                "Information that is legally required to be disclosed."
+            ),
             pid="20000007",
         ),
-        "Tom Reilly", "2024-03-22T09:00:00Z", 4,
+        "Tom Reilly",
+        "2024-03-22T09:00:00Z",
+        4,
     )
     body += blank()
 
@@ -1191,21 +1412,26 @@ def make_nda() -> None:
     body += heading("3.  RETURN OF INFORMATION", pid="20000008")
     body += para(
         cstart(14)
-        + run("Upon the written request of the Disclosing Party or upon termination "
-              "of this Agreement, the Receiving Party shall promptly, and in any "
-              "event within ")
+        + run(
+            "Upon the written request of the Disclosing Party or upon termination "
+            "of this Agreement, the Receiving Party shall promptly, and in any "
+            "event within "
+        )
         + del_("sixty (60) days", "Priya Nair", "2024-04-05T10:00:00Z", 7)
         + ins("thirty (30) days", "Priya Nair", "2024-04-05T10:00:00Z", 8)
-        + run(", return or certifiably destroy all Confidential Information "
-              "(including all copies, notes, analyses, and derivative works) in "
-              "its possession or control. Upon request, the Receiving Party shall "
-              "provide a written certification signed by an authorised officer "
-              "confirming such return or destruction. Notwithstanding the foregoing, "
-              "the Receiving Party may retain one archival copy of Confidential "
-              "Information to the extent required by applicable law or its bona fide "
-              "document retention policies, provided such copy remains subject to "
-              "the confidentiality obligations of this Agreement.")
-        + cend(14) + crefs(14, 15),
+        + run(
+            ", return or certifiably destroy all Confidential Information "
+            "(including all copies, notes, analyses, and derivative works) in "
+            "its possession or control. Upon request, the Receiving Party shall "
+            "provide a written certification signed by an authorised officer "
+            "confirming such return or destruction. Notwithstanding the foregoing, "
+            "the Receiving Party may retain one archival copy of Confidential "
+            "Information to the extent required by applicable law or its bona fide "
+            "document retention policies, provided such copy remains subject to "
+            "the confidentiality obligations of this Agreement."
+        )
+        + cend(14)
+        + crefs(14, 15),
         pid="20000009",
     )
     body += blank()
@@ -1217,14 +1443,17 @@ def make_nda() -> None:
         + del_("twenty-four (24) months", "Tom Reilly", "2024-03-28T11:00:00Z", 9)
         + cstart(12)
         + ins("twelve (12) months", "Tom Reilly", "2024-03-28T11:00:00Z", 10)
-        + cend(12) + crefs(12, 13)
-        + run(" following termination, neither party shall, directly or indirectly, "
-              "solicit or recruit for employment any person who is then employed by "
-              "the other party and with whom the first party had material contact "
-              "in connection with the Proposed Transaction, without the prior written "
-              "consent of the other party. This restriction shall not apply to general "
-              "solicitations (such as job postings or advertisements) not specifically "
-              "targeted at employees of the other party."),
+        + cend(12)
+        + crefs(12, 13)
+        + run(
+            " following termination, neither party shall, directly or indirectly, "
+            "solicit or recruit for employment any person who is then employed by "
+            "the other party and with whom the first party had material contact "
+            "in connection with the Proposed Transaction, without the prior written "
+            "consent of the other party. This restriction shall not apply to general "
+            "solicitations (such as job postings or advertisements) not specifically "
+            "targeted at employees of the other party."
+        ),
         pid="2000000B",
     )
     body += blank()
@@ -1234,15 +1463,19 @@ def make_nda() -> None:
     body += para(
         cstart(4)
         + run("This Agreement shall remain in effect for two (2) years")
-        + cend(4) + cref(4)
-        + run(" from the Effective Date, unless earlier terminated by either Party "
-              "on thirty (30) days\u2019 prior written notice. The obligations of "
-              "confidentiality shall survive termination of this Agreement for a "
-              "further period of ")
+        + cend(4)
+        + cref(4)
+        + run(
+            " from the Effective Date, unless earlier terminated by either Party "
+            "on thirty (30) days\u2019 prior written notice. The obligations of "
+            "confidentiality shall survive termination of this Agreement for a "
+            "further period of "
+        )
         + del_("three (3)", "Tom Reilly", "2024-04-02T09:00:00Z", 5)
         + cstart(8)
         + ins("one (1)", "Tom Reilly", "2024-04-02T09:00:00Z", 6)
-        + cend(8) + crefs(8, 9, 10)
+        + cend(8)
+        + crefs(8, 9, 10)
         + run(" year following such termination."),
         pid="2000000D",
     )
@@ -1251,7 +1484,8 @@ def make_nda() -> None:
     # ── §6 REMEDIES ───────────────────────────────────────────────────────────
     body += heading("6.  REMEDIES", pid="2000000E")
     body += para(
-        run("The Parties acknowledge that a breach of this Agreement would cause "
+        run(
+            "The Parties acknowledge that a breach of this Agreement would cause "
             "irreparable harm for which monetary damages would be an inadequate "
             "remedy and that the precise amount of such damages would be difficult "
             "to ascertain. Accordingly, each Party shall be entitled to seek "
@@ -1260,7 +1494,8 @@ def make_nda() -> None:
             "to all other remedies available at law or in equity. In the event of "
             "a breach involving the genomics pipeline data or clinical trial data "
             "of Helix, Helix shall also be entitled to seek an accounting of profits "
-            "derived from unauthorised use of such data."),
+            "derived from unauthorised use of such data."
+        ),
         pid="2000000F",
     )
     body += blank()
@@ -1269,17 +1504,21 @@ def make_nda() -> None:
     body += heading("7.  COMPELLED DISCLOSURE", pid="20000010")
     body += move_to_block(
         para(
-            run("If the Receiving Party is required by applicable law, regulation, "
+            run(
+                "If the Receiving Party is required by applicable law, regulation, "
                 "or court order to disclose any Confidential Information, it shall: "
                 "(i)\u00a0give the Disclosing Party prompt written notice (where "
                 "legally permissible) to allow the Disclosing Party to seek a "
                 "protective order or other appropriate relief; (ii)\u00a0cooperate "
                 "reasonably with the Disclosing Party in connection with any such "
                 "effort; and (iii)\u00a0disclose only that portion of the Confidential "
-                "Information that is legally required to be disclosed."),
+                "Information that is legally required to be disclosed."
+            ),
             pid="20000011",
         ),
-        "Tom Reilly", "2024-03-22T09:00:00Z", 4,
+        "Tom Reilly",
+        "2024-03-22T09:00:00Z",
+        4,
     )
     body += blank()
 
@@ -1287,18 +1526,21 @@ def make_nda() -> None:
     body += heading("8.  DISPUTE RESOLUTION", pid="20000012")
     body += para(
         cstart(5)
-        + run("Any dispute arising out of or relating to this Agreement that cannot "
-              "be resolved by good-faith negotiation between senior representatives "
-              "of the Parties within thirty (30) days of written notice of the "
-              "dispute shall be submitted to binding arbitration administered by "
-              "JAMS under its Streamlined Arbitration Rules and Procedures. "
-              "The arbitration shall be conducted by a single arbitrator and shall "
-              "take place in New York, New York. The decision of the arbitrator "
-              "shall be final and binding upon the Parties and may be entered as a "
-              "judgment in any court of competent jurisdiction. Each Party shall "
-              "bear its own costs of the arbitration, with the arbitrator\u2019s "
-              "fees split equally.")
-        + cend(5) + cref(5),
+        + run(
+            "Any dispute arising out of or relating to this Agreement that cannot "
+            "be resolved by good-faith negotiation between senior representatives "
+            "of the Parties within thirty (30) days of written notice of the "
+            "dispute shall be submitted to binding arbitration administered by "
+            "JAMS under its Streamlined Arbitration Rules and Procedures. "
+            "The arbitration shall be conducted by a single arbitrator and shall "
+            "take place in New York, New York. The decision of the arbitrator "
+            "shall be final and binding upon the Parties and may be entered as a "
+            "judgment in any court of competent jurisdiction. Each Party shall "
+            "bear its own costs of the arbitration, with the arbitrator\u2019s "
+            "fees split equally."
+        )
+        + cend(5)
+        + cref(5),
         pid="20000013",
     )
     body += blank()
@@ -1306,7 +1548,8 @@ def make_nda() -> None:
     # ── §9 GENERAL ─────────────────────────────────────────────────────────────
     body += heading("9.  GENERAL", pid="20000014")
     body += para(
-        run("This Agreement constitutes the entire agreement between the Parties "
+        run(
+            "This Agreement constitutes the entire agreement between the Parties "
             "relating to the subject matter hereof and supersedes all prior "
             "discussions and agreements with respect thereto. This Agreement may "
             "be amended only by a written instrument signed by authorised "
@@ -1318,7 +1561,8 @@ def make_nda() -> None:
             "extent necessary to make it enforceable and the remaining provisions "
             "shall continue in full force. This Agreement may be executed in "
             "counterparts, each of which shall constitute an original, and "
-            "electronic signatures shall be deemed valid."),
+            "electronic signatures shall be deemed valid."
+        ),
         pid="20000015",
     )
 
@@ -1330,7 +1574,10 @@ def make_nda() -> None:
 
     # Thread A: CI definition (D1 root, D2 reply, D3 reply)
     c += comment_xml(
-        1, "Tom Reilly", "2024-03-05T10:00:00Z", "TR",
+        1,
+        "Tom Reilly",
+        "2024-03-05T10:00:00Z",
+        "TR",
         "This definition is far too broad. \u201cAny and all information in any "
         "form\u201d would sweep in casual hallway conversations, publicly available "
         "press releases, and information Helix has no intent to protect. From a "
@@ -1340,7 +1587,10 @@ def make_nda() -> None:
         "D0000001",
     )
     c += comment_xml(
-        2, "Priya Nair", "2024-03-06T09:00:00Z", "PN",
+        2,
+        "Priya Nair",
+        "2024-03-06T09:00:00Z",
+        "PN",
         "Tom, the broad definition is intentional and standard in Meridian\u2019s "
         "investment NDA template. We share materials verbally in data room sessions "
         "and on analyst calls \u2014 a marking requirement would leave us exposed "
@@ -1349,7 +1599,10 @@ def make_nda() -> None:
         "D0000002",
     )
     c += comment_xml(
-        3, "Tom Reilly", "2024-03-07T08:30:00Z", "TR",
+        3,
+        "Tom Reilly",
+        "2024-03-07T08:30:00Z",
+        "TR",
         "I understand the concern about oral disclosures. Proposed compromise: keep "
         "the written marking requirement but add a catch-all covering oral disclosures "
         "that are confirmed in writing within 5 business days. This is the NVCA "
@@ -1361,7 +1614,10 @@ def make_nda() -> None:
 
     # D4 standalone — standstill question (Priya, Mar 10)
     c += comment_xml(
-        4, "Priya Nair", "2024-03-10T11:00:00Z", "PN",
+        4,
+        "Priya Nair",
+        "2024-03-10T11:00:00Z",
+        "PN",
         "Should we include a standstill provision preventing Helix from approaching "
         "Meridian\u2019s portfolio companies (list attached as Annex\u00a01) during "
         "the two-year term? Given that Meridian has portfolio companies operating "
@@ -1372,7 +1628,10 @@ def make_nda() -> None:
 
     # D5 standalone — Alex informal (Mar 15)
     c += comment_xml(
-        5, "Alex Foster", "2024-03-15T17:30:00Z", "AF",
+        5,
+        "Alex Foster",
+        "2024-03-15T17:30:00Z",
+        "AF",
         "Hi all \u2014 just looped in by Tom. Quick question: does this NDA cover "
         "our CRISPR-Cas12 pipeline data specifically? That\u2019s the crown jewel "
         "and the basis for the USD\u00a05M valuation. Before we start sharing the "
@@ -1383,7 +1642,10 @@ def make_nda() -> None:
 
     # Thread B: auditor carve-out (D6 root, D7 reply)
     c += comment_xml(
-        6, "Tom Reilly", "2024-03-20T14:00:00Z", "TR",
+        6,
+        "Tom Reilly",
+        "2024-03-20T14:00:00Z",
+        "TR",
         "We need an explicit carve-out permitting disclosure to our legal counsel, "
         "auditors (Deloitte), and financing sources (our bridge lender, Pacific "
         "Ventures). Without this, Helix\u2019s CFO cannot involve the accountants "
@@ -1392,7 +1654,10 @@ def make_nda() -> None:
         "D0000006",
     )
     c += comment_xml(
-        7, "Priya Nair", "2024-03-21T09:00:00Z", "PN",
+        7,
+        "Priya Nair",
+        "2024-03-21T09:00:00Z",
+        "PN",
         "Meridian can accept a carve-out for Authorised Recipients on a need-to-know "
         "basis, provided such persons are bound by confidentiality obligations "
         "materially no less restrictive than this Agreement and that Helix remains "
@@ -1403,7 +1668,10 @@ def make_nda() -> None:
 
     # Thread C: survival period (D8 root, D9 reply, D10 reply)
     c += comment_xml(
-        8, "Priya Nair", "2024-04-02T09:00:00Z", "PN",
+        8,
+        "Priya Nair",
+        "2024-04-02T09:00:00Z",
+        "PN",
         "Three years survival is standard for investment NDAs of this type and was "
         "in Meridian\u2019s template. One year is wholly insufficient for the "
         "information we are sharing here \u2014 particularly the pipeline valuation "
@@ -1412,7 +1680,10 @@ def make_nda() -> None:
         "D0000008",
     )
     c += comment_xml(
-        9, "Tom Reilly", "2024-04-03T10:00:00Z", "TR",
+        9,
+        "Tom Reilly",
+        "2024-04-03T10:00:00Z",
+        "TR",
         "Priya, Helix is a growth-stage company and our Series\u00a0A investors "
         "have flagged long-tail confidentiality obligations as a diligence concern. "
         "The genomics landscape moves rapidly \u2014 information that is commercially "
@@ -1422,7 +1693,10 @@ def make_nda() -> None:
         "D0000009",
     )
     c += comment_xml(
-        10, "Priya Nair", "2024-04-04T08:00:00Z", "PN",
+        10,
+        "Priya Nair",
+        "2024-04-04T08:00:00Z",
+        "PN",
         "Understood the rationale. Meridian can meet at two (2) years provided "
         "the pipeline valuation models and any Phase\u00a02 clinical data are "
         "explicitly designated as a longer-protected category (minimum three years) "
@@ -1433,7 +1707,10 @@ def make_nda() -> None:
 
     # D11 standalone — Alex data room timing (Mar 12)
     c += comment_xml(
-        11, "Alex Foster", "2024-03-12T15:00:00Z", "AF",
+        11,
+        "Alex Foster",
+        "2024-03-12T15:00:00Z",
+        "AF",
         "Priya / Tom \u2014 quick practical question: once both parties sign "
         "this NDA, how long before we can open the Phase\u00a02 data room? "
         "Helix\u2019s board has given us a 90-day exclusivity window starting "
@@ -1445,7 +1722,10 @@ def make_nda() -> None:
 
     # Thread D: non-solicitation (D12 root, D13 reply)
     c += comment_xml(
-        12, "Tom Reilly", "2024-03-28T11:00:00Z", "TR",
+        12,
+        "Tom Reilly",
+        "2024-03-28T11:00:00Z",
+        "TR",
         "Twenty-four months non-solicitation is excessive and unusual in an NDA "
         "of this type. For a Series\u00a0A process involving fewer than five Helix "
         "employees, a 24-month restriction on recruiting would effectively freeze "
@@ -1455,7 +1735,10 @@ def make_nda() -> None:
         "D000000C",
     )
     c += comment_xml(
-        13, "Priya Nair", "2024-03-29T09:00:00Z", "PN",
+        13,
+        "Priya Nair",
+        "2024-03-29T09:00:00Z",
+        "PN",
         "Meridian\u2019s standard for investment NDAs is 24 months, reflecting the "
         "length of the post-investment relationship and the depth of access our "
         "team will have to Helix personnel during due diligence. That said, we "
@@ -1467,7 +1750,10 @@ def make_nda() -> None:
 
     # Thread E: return of materials (D14 root, D15 reply)
     c += comment_xml(
-        14, "Priya Nair", "2024-04-08T10:00:00Z", "PN",
+        14,
+        "Priya Nair",
+        "2024-04-08T10:00:00Z",
+        "PN",
         "On Section\u00a03: sixty days is too long for return of materials in an "
         "investment context where the deal may not proceed. If the Proposed "
         "Transaction is not consummated, Meridian needs its financial models and "
@@ -1476,7 +1762,10 @@ def make_nda() -> None:
         "D000000E",
     )
     c += comment_xml(
-        15, "Diane Wu", "2024-04-10T14:00:00Z", "DW",
+        15,
+        "Diane Wu",
+        "2024-04-10T14:00:00Z",
+        "DW",
         "Confirmed from Meridian\u2019s side \u2014 thirty days is workable and "
         "consistent with our operational capacity. All open issues on my review "
         "list are now resolved. Priya, please coordinate with Tom on final "
@@ -1490,37 +1779,52 @@ def make_nda() -> None:
     # ── commentsExtended ──────────────────────────────────────────────────────
 
     ex = ""
-    ex += comment_ex("D0000001")                                      # Thread A root
-    ex += comment_ex("D0000002", parent_para_id="D0000001")           # A reply
-    ex += comment_ex("D0000003", parent_para_id="D0000001")           # A reply
-    ex += comment_ex("D0000004")                                      # D4 standalone
-    ex += comment_ex("D0000005")                                      # D5 standalone
-    ex += comment_ex("D0000006")                                      # Thread B root
-    ex += comment_ex("D0000007", parent_para_id="D0000006")           # B reply
-    ex += comment_ex("D0000008")                                      # Thread C root
-    ex += comment_ex("D0000009", parent_para_id="D0000008")           # C reply
-    ex += comment_ex("D000000A", parent_para_id="D0000008")           # C reply
-    ex += comment_ex("D000000B")                                      # D11 standalone
-    ex += comment_ex("D000000C")                                      # Thread D root
-    ex += comment_ex("D000000D", parent_para_id="D000000C")           # D reply
-    ex += comment_ex("D000000E")                                      # Thread E root
-    ex += comment_ex("D000000F", parent_para_id="D000000E")           # E reply
+    ex += comment_ex("D0000001")  # Thread A root
+    ex += comment_ex("D0000002", parent_para_id="D0000001")  # A reply
+    ex += comment_ex("D0000003", parent_para_id="D0000001")  # A reply
+    ex += comment_ex("D0000004")  # D4 standalone
+    ex += comment_ex("D0000005")  # D5 standalone
+    ex += comment_ex("D0000006")  # Thread B root
+    ex += comment_ex("D0000007", parent_para_id="D0000006")  # B reply
+    ex += comment_ex("D0000008")  # Thread C root
+    ex += comment_ex("D0000009", parent_para_id="D0000008")  # C reply
+    ex += comment_ex("D000000A", parent_para_id="D0000008")  # C reply
+    ex += comment_ex("D000000B")  # D11 standalone
+    ex += comment_ex("D000000C")  # Thread D root
+    ex += comment_ex("D000000D", parent_para_id="D000000C")  # D reply
+    ex += comment_ex("D000000E")  # Thread E root
+    ex += comment_ex("D000000F", parent_para_id="D000000E")  # E reply
 
     comments_extended_xml = wrap_comments_extended(ex)
 
     # ── commentsIds ───────────────────────────────────────────────────────────
 
     para_ids = [
-        "D0000001","D0000002","D0000003","D0000004","D0000005",
-        "D0000006","D0000007","D0000008","D0000009","D000000A",
-        "D000000B","D000000C","D000000D","D000000E","D000000F",
+        "D0000001",
+        "D0000002",
+        "D0000003",
+        "D0000004",
+        "D0000005",
+        "D0000006",
+        "D0000007",
+        "D0000008",
+        "D0000009",
+        "D000000A",
+        "D000000B",
+        "D000000C",
+        "D000000D",
+        "D000000E",
+        "D000000F",
     ]
     ids = "".join(comment_id_entry(pid, i) for i, pid in enumerate(para_ids, start=1))
     comments_ids_xml = wrap_comments_ids(ids)
 
     write_docx(
         os.path.join(OUTPUT_DIR, "nda.docx"),
-        document_xml, comments_xml, comments_extended_xml, comments_ids_xml,
+        document_xml,
+        comments_xml,
+        comments_extended_xml,
+        comments_ids_xml,
     )
 
 

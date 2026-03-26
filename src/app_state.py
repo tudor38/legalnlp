@@ -83,6 +83,7 @@ SENTENCE_TRANSFORMER_MODELS = [MODEL_MINILM, MODEL_MPNET]
 # Cross-page typed accessors
 # ---------------------------------------------------------------------------
 
+
 def get_file_bytes() -> bytes | None:
     return st.session_state.get(KEY_DOC_BYTES)
 

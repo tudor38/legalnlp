@@ -5,6 +5,7 @@ from annotated_text import annotated_text
 from datetime import datetime
 from src.comments.extract import Comment, WordVersion
 
+
 def _format_date(iso: str) -> str:
     try:
         dt = datetime.fromisoformat(iso.rstrip("Z"))
@@ -58,9 +59,13 @@ def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -
             continue
         parts.append(para[pos:start])
         if kind == "del":
-            parts.append(f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>')
+            parts.append(
+                f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
+            )
         else:
-            parts.append(f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>')
+            parts.append(
+                f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>'
+            )
         pos = end
     parts.append(para[pos:])
     st.markdown("".join(parts), unsafe_allow_html=True)
@@ -72,11 +77,13 @@ def render_paragraph_with_redline(para: str, text: str, kind: str) -> None:
         st.markdown(f"> {para}", unsafe_allow_html=True)
         return
     before = para[:idx]
-    after = para[idx + len(text):]
+    after = para[idx + len(text) :]
     if kind == "insertion":
         styled = f'<span style="color:#3b82f6;text-decoration:underline">{text}</span>'
     else:
-        styled = f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
+        styled = (
+            f'<span style="color:#ef4444;text-decoration:line-through">{text}</span>'
+        )
     st.markdown(f"{before}{styled}{after}", unsafe_allow_html=True)
 
 

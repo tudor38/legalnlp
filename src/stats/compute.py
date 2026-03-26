@@ -108,7 +108,9 @@ def comment_ages_df(
                 }
             )
         except ValueError:
-            logger.warning("Skipping comment with unparseable date %r (id=%s)", c.date, c.id)
+            logger.warning(
+                "Skipping comment with unparseable date %r (id=%s)", c.date, c.id
+            )
 
     for c in comments:
         _add(c, "comment")
@@ -141,7 +143,9 @@ def redline_ages_df(
                 }
             )
         except ValueError:
-            logger.warning("Skipping redline with unparseable date %r (id=%s)", r.date, r.id)
+            logger.warning(
+                "Skipping redline with unparseable date %r (id=%s)", r.date, r.id
+            )
     return pd.DataFrame(rows)
 
 
@@ -166,6 +170,7 @@ def move_ages_df(
                 }
             )
         except ValueError:
-            logger.warning("Skipping move with unparseable date %r (id=%s)", m.date, m.id)
+            logger.warning(
+                "Skipping move with unparseable date %r (id=%s)", m.date, m.id
+            )
     return pd.DataFrame(rows)
-

@@ -72,7 +72,7 @@ def _section(raw: dict, *path: str) -> dict:
     for key in path:
         if key not in node:
             raise ConfigError(
-                f"app.toml is missing required section [{'.'.join(path[:path.index(key) + 1])}]"
+                f"app.toml is missing required section [{'.'.join(path[: path.index(key) + 1])}]"
             )
         node = node[key]
     return node
@@ -80,9 +80,7 @@ def _section(raw: dict, *path: str) -> dict:
 
 def _field(section: dict, key: str, section_name: str, expected_type: type):
     if key not in section:
-        raise ConfigError(
-            f"app.toml [{section_name}] is missing required key '{key}'"
-        )
+        raise ConfigError(f"app.toml [{section_name}] is missing required key '{key}'")
     val = section[key]
     if not isinstance(val, expected_type):
         raise ConfigError(
@@ -114,7 +112,9 @@ def _parse(raw: dict) -> AppConfig:
             timeline_height_per_author=_field(
                 chart_raw, "timeline_height_per_author", "chart", int
             ),
-            timeline_height_base=_field(chart_raw, "timeline_height_base", "chart", int),
+            timeline_height_base=_field(
+                chart_raw, "timeline_height_base", "chart", int
+            ),
         )
 
         tb_raw = _section(raw, "time_bin")

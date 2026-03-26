@@ -18,7 +18,12 @@ from src.app_state import MODEL_MINILM, MODEL_MPNET, get_file_bytes, get_file_na
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
-from src.utils.text import TOPIC_PALETTE, bm25_scores, highlight_query_tokens, highlight_term
+from src.utils.text import (
+    TOPIC_PALETTE,
+    bm25_scores,
+    highlight_query_tokens,
+    highlight_term,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +94,9 @@ _saved_per_page = st.session_state.get("_search_pref_per_page", 10)
 per_page = st.sidebar.selectbox(
     "Results per page",
     options=[5, 10, 20, 50],
-    index=[5, 10, 20, 50].index(_saved_per_page) if _saved_per_page in [5, 10, 20, 50] else 1,
+    index=[5, 10, 20, 50].index(_saved_per_page)
+    if _saved_per_page in [5, 10, 20, 50]
+    else 1,
 )
 st.session_state["_search_pref_per_page"] = per_page
 
@@ -126,13 +133,16 @@ st.session_state["_search_pref_query"] = query
 _method_options = ["Keyword", "Regex", "Relevance", "Semantic"]
 st.session_state.setdefault("_search_pref_method", "Keyword")
 st.session_state.setdefault("search_method", st.session_state["_search_pref_method"])
-method = st.pills(
-    "Search type",
-    options=_method_options,
-    key="search_method",
-    label_visibility="collapsed",
-    selection_mode="single",
-) or "Keyword"
+method = (
+    st.pills(
+        "Search type",
+        options=_method_options,
+        key="search_method",
+        label_visibility="collapsed",
+        selection_mode="single",
+    )
+    or "Keyword"
+)
 st.session_state["_search_pref_method"] = method
 
 min_score: float = 0.0
@@ -154,7 +164,9 @@ if method == "Semantic":
     _selected = st.sidebar.selectbox(
         "Embedding model",
         _model_options + ["Custom…"],
-        index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
+        index=_model_options.index(_saved_model)
+        if _saved_model in _model_options
+        else 0,
         key="search_model",
     )
     if _selected == "Custom…":
@@ -166,7 +178,9 @@ if method == "Semantic":
         ).strip()
         st.session_state["_search_pref_custom_model"] = model_name
         if not model_name:
-            st.info("Enter a HuggingFace model ID above to use a custom embedding model.")
+            st.info(
+                "Enter a HuggingFace model ID above to use a custom embedding model."
+            )
             st.stop()
     else:
         model_name = _selected
@@ -204,7 +218,9 @@ if st.session_state.get("_search_hits_key") != search_key:
         all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
         hits = [(i, s) for i, s in all_positive if s >= min_score]
         if not hits and all_positive:
-            st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+            st.info(
+                f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
+            )
             st.stop()
 
     else:  # Semantic
@@ -212,7 +228,9 @@ if st.session_state.get("_search_hits_key") != search_key:
             with st.spinner("Embedding…"):
                 corpus_embs = _embed(tuple(texts), model_name)
                 encoder = get_sentence_transformer(model_name)
-                q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
+                q_emb = encoder.encode(
+                    [q], show_progress_bar=False, normalize_embeddings=True
+                )[0]
         except RuntimeError as e:
             st.error(str(e))
             st.stop()
@@ -221,7 +239,9 @@ if st.session_state.get("_search_hits_key") != search_key:
         all_ranked = [(int(i), float(sims[i])) for i in ranked]
         hits = [(i, s) for i, s in all_ranked if s >= min_score]
         if not hits and any(s > 0 for _, s in all_ranked):
-            st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+            st.info(
+                f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
+            )
             st.stop()
 
     st.session_state["_search_hits"] = hits
@@ -248,14 +268,18 @@ if total_pages > 1:
     if col_prev.button("← Prev", disabled=page == 0, key="search_prev"):
         st.session_state["_search_page"] = page - 1
         st.rerun()
-    col_page.caption(f"Page {page + 1} of {total_pages}", )
+    col_page.caption(
+        f"Page {page + 1} of {total_pages}",
+    )
     if col_next.button("Next →", disabled=page >= total_pages - 1, key="search_next"):
         st.session_state["_search_page"] = page + 1
         st.rerun()
 
 # Assign a color to each unique document name
 unique_docs = list(dict.fromkeys(doc_names))
-doc_color = {name: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, name in enumerate(unique_docs)}
+doc_color = {
+    name: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, name in enumerate(unique_docs)
+}
 
 # Results
 for idx, score in page_hits:
@@ -267,7 +291,10 @@ for idx, score in page_hits:
         display = highlight_term(passage, q, color)
         score_str = ""
     elif method == "Regex":
-        display = pattern.sub(lambda m, c=color: f'<mark style="background:{c}">{m.group(0)}</mark>', passage)
+        display = pattern.sub(
+            lambda m, c=color: f'<mark style="background:{c}">{m.group(0)}</mark>',
+            passage,
+        )
         score_str = ""
     elif method == "Relevance":
         display = highlight_query_tokens(passage, q, color)

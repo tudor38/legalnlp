@@ -18,7 +18,14 @@ from src.app_state import MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
-from src.utils.text import TOPIC_PALETTE, bm25_scores, highlight_query_tokens, highlight_term, highlight_topic_keywords, tokenize
+from src.utils.text import (
+    TOPIC_PALETTE,
+    bm25_scores,
+    highlight_query_tokens,
+    highlight_term,
+    highlight_topic_keywords,
+    tokenize,
+)
 
 
 def _clean_docs(paragraphs: Sequence[str], min_chars: int) -> list[str]:
@@ -178,7 +185,6 @@ def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
     }
 
 
-
 file_bytes = require_document()
 
 doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
@@ -227,7 +233,9 @@ if _selected_model == "Custom…":
     ).strip()
     st.session_state["_topic_pref_custom_model"] = embedding_model_name
     if not embedding_model_name:
-        st.info("Enter a HuggingFace model ID in the sidebar to use a custom embedding model.")
+        st.info(
+            "Enter a HuggingFace model ID in the sidebar to use a custom embedding model."
+        )
         st.stop()
 else:
     embedding_model_name = _selected_model
@@ -249,9 +257,14 @@ if len(docs) < 12:
 
 st.sidebar.metric("Passages", len(docs))
 
+
 def _on_search_submit() -> None:
-    st.session_state["_topic_active_query"] = st.session_state.get("topic_search_query", "")
-    st.session_state["_topic_active_method"] = st.session_state.get("topic_search_method") or "Keyword"
+    st.session_state["_topic_active_query"] = st.session_state.get(
+        "topic_search_query", ""
+    )
+    st.session_state["_topic_active_method"] = (
+        st.session_state.get("topic_search_method") or "Keyword"
+    )
 
 
 @st.fragment
@@ -294,8 +307,8 @@ if active_method == "Semantic":
 normalized_query = active_query.strip().lower()
 highlevel_default, midlevel_default, lowlevel_default = _default_granularity(len(docs))
 _highlevel_max = max(3, min(50, len(docs) // 4))
-_midlevel_max  = max(3, min(30, len(docs) // 6))
-_lowlevel_max  = max(3, min(15, len(docs) // 10))
+_midlevel_max = max(3, min(30, len(docs) // 6))
+_lowlevel_max = max(3, min(15, len(docs) // 10))
 
 
 def _to_slider(min_topic_size: int, max_val: int) -> int:
@@ -316,8 +329,11 @@ st.sidebar.markdown("### Topic Levels")
 
 _highlevel_pos = st.sidebar.slider(
     "High-level",
-    1, 100,
-    st.session_state.get("_topic_pref_highlevel", _to_slider(highlevel_default, _highlevel_max)),
+    1,
+    100,
+    st.session_state.get(
+        "_topic_pref_highlevel", _to_slider(highlevel_default, _highlevel_max)
+    ),
     key="topic_highlevel",
     help="Move right for more high-level topics; move left for fewer, broader groupings.",
 )
@@ -326,8 +342,11 @@ highlevel_size = _from_slider(_highlevel_pos, _highlevel_max)
 
 _midlevel_pos = st.sidebar.slider(
     "Mid-level",
-    1, 100,
-    st.session_state.get("_topic_pref_midlevel", _to_slider(midlevel_default, _midlevel_max)),
+    1,
+    100,
+    st.session_state.get(
+        "_topic_pref_midlevel", _to_slider(midlevel_default, _midlevel_max)
+    ),
     key="topic_midlevel",
     help="Move right for more mid-level topics; move left for fewer, broader groupings.",
 )
@@ -336,8 +355,11 @@ midlevel_size = _from_slider(_midlevel_pos, _midlevel_max)
 
 _lowlevel_pos = st.sidebar.slider(
     "Low-level",
-    1, 100,
-    st.session_state.get("_topic_pref_lowlevel", _to_slider(lowlevel_default, _lowlevel_max)),
+    1,
+    100,
+    st.session_state.get(
+        "_topic_pref_lowlevel", _to_slider(lowlevel_default, _lowlevel_max)
+    ),
     key="topic_lowlevel",
     help="Move right for more low-level topics; move left for fewer, broader groupings.",
 )
@@ -370,17 +392,21 @@ if seed_words_raw and seed_words_raw.strip():
     if parsed:
         seed_topic_list = parsed
     else:
-        st.sidebar.warning("Seed words ignored — no valid words found (each word must be at least 2 characters).")
+        st.sidebar.warning(
+            "Seed words ignored — no valid words found (each word must be at least 2 characters)."
+        )
 
 _topic_state_key = hashlib.md5(
-    repr({
-        "doc": hashlib.md5(file_bytes).hexdigest(),
-        "unit": analysis_unit,
-        "min_chars": min_chars,
-        "model": embedding_model_name,
-        "granularity": granularity_sizes,
-        "seeds": (seed_words_raw or "").strip(),
-    }).encode()
+    repr(
+        {
+            "doc": hashlib.md5(file_bytes).hexdigest(),
+            "unit": analysis_unit,
+            "min_chars": min_chars,
+            "model": embedding_model_name,
+            "granularity": granularity_sizes,
+            "seeds": (seed_words_raw or "").strip(),
+        }
+    ).encode()
 ).hexdigest()
 
 if st.session_state.get("_topic_state_key") != _topic_state_key:
@@ -409,14 +435,16 @@ if st.session_state.get("_topic_state_key") != _topic_state_key:
         st.error(str(e))
         st.stop()
 
-    st.session_state.update({
-        "_topic_state_key": _topic_state_key,
-        "_topic_docs": docs,
-        "_topic_embeddings": embeddings,
-        "_topic_reduced": reduced_embeddings,
-        "_topic_label_layers": label_layers,
-        "_topic_counts": topic_counts,
-    })
+    st.session_state.update(
+        {
+            "_topic_state_key": _topic_state_key,
+            "_topic_docs": docs,
+            "_topic_embeddings": embeddings,
+            "_topic_reduced": reduced_embeddings,
+            "_topic_label_layers": label_layers,
+            "_topic_counts": topic_counts,
+        }
+    )
 else:
     docs = st.session_state["_topic_docs"]
     embeddings = st.session_state["_topic_embeddings"]
@@ -470,6 +498,7 @@ else:
     ][:rank_limit]
     score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
 
+
 def _show_map(
     plot_embeddings: np.ndarray,
     plot_label_layers: tuple,
@@ -477,7 +506,9 @@ def _show_map(
     html_content: str | None,
 ) -> None:
     if html_content is None:
-        st.caption("Interactive map is not available for this dataset. Adjusting topic sliders could enable the option to view an interactive map.")
+        st.caption(
+            "Interactive map is not available for this dataset. Adjusting topic sliders could enable the option to view an interactive map."
+        )
         with st.spinner("Building static map…"):
             png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
         st.image(base64.b64decode(png_b64), width="stretch")
@@ -509,7 +540,9 @@ st.subheader("Topic Explorer")
 if not matched_indices:
     st.info("No text matches your search. Try a broader term.")
 elif len(matched_indices) < 10:
-    st.info("Too few matches to render a map (minimum 10). Results are shown in the table below.")
+    st.info(
+        "Too few matches to render a map (minimum 10). Results are shown in the table below."
+    )
 else:
     plot_embeddings = reduced_embeddings[matched_indices]
     plot_label_layers = tuple(labels[matched_indices] for labels in label_layers)
@@ -518,7 +551,9 @@ else:
     _map_sig = (tuple(matched_indices), tuple(granularity_sizes), embedding_model_name)
     if st.session_state.get("_topic_map_sig") != _map_sig:
         _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
-        st.session_state["_topic_map_type_pref"] = "Static" if _n_unique <= 6 else "Interactive"
+        st.session_state["_topic_map_type_pref"] = (
+            "Static" if _n_unique <= 6 else "Interactive"
+        )
         st.session_state["_topic_map_sig"] = _map_sig
         with st.spinner("Building map…"):
             html_content = _render_interactive_map(
@@ -577,7 +612,9 @@ def _results_section(
     )
     if score_map:
         results_df["score"] = results_df["paragraph_idx"].map(score_map)
-        results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
+        results_df = results_df.sort_values("score", ascending=False).reset_index(
+            drop=True
+        )
 
     selected_topics: list[str] = []
 
@@ -592,7 +629,9 @@ def _results_section(
             key="topic_filter_col",
             label_visibility="collapsed",
         )
-        topic_options = sorted(t for t in results_df[filter_col].unique() if t != "Noise")
+        topic_options = sorted(
+            t for t in results_df[filter_col].unique() if t != "Noise"
+        )
         selected_topics = fcol2.multiselect(
             "Topics",
             options=topic_options,
@@ -607,7 +646,9 @@ def _results_section(
             ].reset_index(drop=True)
 
     st.markdown("#### Results")
-    sortable_cols = [c for c in ["score", *topic_columns, "paragraph_idx"] if c in results_df.columns]
+    sortable_cols = [
+        c for c in ["score", *topic_columns, "paragraph_idx"] if c in results_df.columns
+    ]
     has_score = bool(score_map)
     if has_score != st.session_state.get("_topic_had_score"):
         st.session_state["_topic_had_score"] = has_score
@@ -622,7 +663,9 @@ def _results_section(
         label_visibility="collapsed",
     )
     sort_asc = scol2.toggle("Ascending", value=False, key="topic_sort_asc")
-    results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(drop=True)
+    results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(
+        drop=True
+    )
 
     st.caption(f"{len(results_df)} results")
     st.dataframe(
@@ -632,7 +675,9 @@ def _results_section(
         column_config={
             "paragraph_idx": st.column_config.NumberColumn("Para", width="small"),
             "text": st.column_config.TextColumn("Passage", width="large"),
-            "score": st.column_config.NumberColumn("Score", format="%.4f", width="small"),
+            "score": st.column_config.NumberColumn(
+                "Score", format="%.4f", width="small"
+            ),
         },
     )
 
@@ -661,9 +706,9 @@ def _results_section(
             highlighted = highlight_query_tokens(text, search_query)
         elif search_method == "Regex":
             try:
-                highlighted = re.compile(
-                    search_query.strip(), flags=re.IGNORECASE
-                ).sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
+                highlighted = re.compile(search_query.strip(), flags=re.IGNORECASE).sub(
+                    lambda m: f"<mark>{m.group(0)}</mark>", text
+                )
             except re.error:
                 highlighted = text
         else:

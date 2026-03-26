@@ -135,41 +135,41 @@ def _seed(perm_key: str) -> None:
 
 
 _CB: dict[str, tuple[str, object]] = {
-    "is_closed":        (KEY_DOC_FINALIZED,        False),
-    "closed_date":      (KEY_DOC_FINALIZED_DATE,   None),
-    "expanded_view":    (KEY_COMMENT_TL_EXPANDED,  False),
-    "expand_all":       (KEY_COMMENT_TL_EXPAND_ALL, False),
-    "show_fields":      (KEY_COMMENT_TL_FIELDS,    []),
-    "r_expanded_view":  (KEY_REDLINE_TL_EXPANDED,  False),
-    "r_expand_all":     (KEY_REDLINE_TL_EXPAND_ALL, False),
-    "r_show_fields":    (KEY_REDLINE_TL_FIELDS,    []),
-    "m_expanded_view":  (KEY_MOVE_TL_EXPANDED,     False),
-    "m_expand_all":     (KEY_MOVE_TL_EXPAND_ALL,   False),
-    "m_show_fields":    (KEY_MOVE_TL_FIELDS,       []),
-    "timeline_authors": (KEY_FILTER_AUTHORS,        []),
-    "main_tab":         (KEY_STATS_MAIN_TAB,        MAIN_TABS.comments),
-    "comment_tab":      (KEY_COMMENT_VIEW,          COMMENT_VIEWS.counts),
-    "redline_tab":      (KEY_REDLINE_VIEW,          REDLINE_VIEWS.counts),
-    "move_tab":         (KEY_MOVE_VIEW,             MOVE_VIEWS.counts),
+    "is_closed": (KEY_DOC_FINALIZED, False),
+    "closed_date": (KEY_DOC_FINALIZED_DATE, None),
+    "expanded_view": (KEY_COMMENT_TL_EXPANDED, False),
+    "expand_all": (KEY_COMMENT_TL_EXPAND_ALL, False),
+    "show_fields": (KEY_COMMENT_TL_FIELDS, []),
+    "r_expanded_view": (KEY_REDLINE_TL_EXPANDED, False),
+    "r_expand_all": (KEY_REDLINE_TL_EXPAND_ALL, False),
+    "r_show_fields": (KEY_REDLINE_TL_FIELDS, []),
+    "m_expanded_view": (KEY_MOVE_TL_EXPANDED, False),
+    "m_expand_all": (KEY_MOVE_TL_EXPAND_ALL, False),
+    "m_show_fields": (KEY_MOVE_TL_FIELDS, []),
+    "timeline_authors": (KEY_FILTER_AUTHORS, []),
+    "main_tab": (KEY_STATS_MAIN_TAB, MAIN_TABS.comments),
+    "comment_tab": (KEY_COMMENT_VIEW, COMMENT_VIEWS.counts),
+    "redline_tab": (KEY_REDLINE_VIEW, REDLINE_VIEWS.counts),
+    "move_tab": (KEY_MOVE_VIEW, MOVE_VIEWS.counts),
 }
 _stores = {name: _make_store(key, default) for name, (key, default) in _CB.items()}
 
-_store_is_closed       = _stores["is_closed"]
-_store_closed_date     = _stores["closed_date"]
-_store_expanded_view   = _stores["expanded_view"]
-_store_expand_all      = _stores["expand_all"]
-_store_show_fields     = _stores["show_fields"]
+_store_is_closed = _stores["is_closed"]
+_store_closed_date = _stores["closed_date"]
+_store_expanded_view = _stores["expanded_view"]
+_store_expand_all = _stores["expand_all"]
+_store_show_fields = _stores["show_fields"]
 _store_r_expanded_view = _stores["r_expanded_view"]
-_store_r_expand_all    = _stores["r_expand_all"]
-_store_r_show_fields   = _stores["r_show_fields"]
+_store_r_expand_all = _stores["r_expand_all"]
+_store_r_show_fields = _stores["r_show_fields"]
 _store_m_expanded_view = _stores["m_expanded_view"]
-_store_m_expand_all    = _stores["m_expand_all"]
-_store_m_show_fields   = _stores["m_show_fields"]
+_store_m_expand_all = _stores["m_expand_all"]
+_store_m_show_fields = _stores["m_show_fields"]
 _store_timeline_authors = _stores["timeline_authors"]
-_store_main_tab        = _stores["main_tab"]
-_store_comment_tab     = _stores["comment_tab"]
-_store_redline_tab     = _stores["redline_tab"]
-_store_move_tab        = _stores["move_tab"]
+_store_main_tab = _stores["main_tab"]
+_store_comment_tab = _stores["comment_tab"]
+_store_redline_tab = _stores["redline_tab"]
+_store_move_tab = _stores["move_tab"]
 
 
 def _store_date_range():
@@ -246,7 +246,9 @@ def _sidebar_controls(
         ld = latest_date(comments, redlines)
         default = ld.date() if ld else datetime.today().date()
         saved = st.session_state[KEY_DOC_FINALIZED_DATE]
-        st.session_state["_doc_finalized_date"] = saved if saved is not None else default
+        st.session_state["_doc_finalized_date"] = (
+            saved if saved is not None else default
+        )
         closed_date = st.sidebar.date_input(
             "Closed date",
             key="_doc_finalized_date",
@@ -276,8 +278,12 @@ def _sidebar_controls(
         else datetime.now().date()
     )
 
-    saved_min = max(st.session_state[KEY_FILTER_DATE_MIN] or global_date_min, global_date_min)
-    saved_max = min(st.session_state[KEY_FILTER_DATE_MAX] or global_date_max, global_date_max)
+    saved_min = max(
+        st.session_state[KEY_FILTER_DATE_MIN] or global_date_min, global_date_min
+    )
+    saved_max = min(
+        st.session_state[KEY_FILTER_DATE_MAX] or global_date_max, global_date_max
+    )
 
     date_range = st.sidebar.slider(
         "Date range",
@@ -316,7 +322,11 @@ def _render_comment_timeline(
     filtered_c_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in (KEY_COMMENT_TL_EXPANDED, KEY_COMMENT_TL_EXPAND_ALL, KEY_COMMENT_TL_FIELDS):
+    for key in (
+        KEY_COMMENT_TL_EXPANDED,
+        KEY_COMMENT_TL_EXPAND_ALL,
+        KEY_COMMENT_TL_FIELDS,
+    ):
         _seed(key)
     render_timeline(
         filtered_c_df,
@@ -347,7 +357,11 @@ def _render_redline_timeline(
     filtered_r_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in (KEY_REDLINE_TL_EXPANDED, KEY_REDLINE_TL_EXPAND_ALL, KEY_REDLINE_TL_FIELDS):
+    for key in (
+        KEY_REDLINE_TL_EXPANDED,
+        KEY_REDLINE_TL_EXPAND_ALL,
+        KEY_REDLINE_TL_FIELDS,
+    ):
         _seed(key)
     render_timeline(
         filtered_r_df,
@@ -454,7 +468,14 @@ def _render_move_timeline(
         filtered_m_df,
         "Who moved text? When?",
         fields=MOVE_FIELDS,
-        display_cols=["author", "date", "text", "distance", "from_para_idx", "to_para_idx"],
+        display_cols=[
+            "author",
+            "date",
+            "text",
+            "distance",
+            "from_para_idx",
+            "to_para_idx",
+        ],
         default_fields=[f.label for f in MOVE_FIELDS],
         all_authors=all_authors,
         expanded_view_key="_move_tl_expanded",
@@ -489,9 +510,7 @@ def _render_moves(
         MOVE_VIEWS.counts: lambda: render_author_bar(
             filtered_m_df, "Who moved text? How much?", all_authors=all_authors
         ),
-        MOVE_VIEWS.timeline: lambda: _render_move_timeline(
-            filtered_m_df, all_authors
-        ),
+        MOVE_VIEWS.timeline: lambda: _render_move_timeline(filtered_m_df, all_authors),
     }
     if move_tab in move_view_renderers:
         move_view_renderers[move_tab]()

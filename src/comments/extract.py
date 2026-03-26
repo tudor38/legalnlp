@@ -366,7 +366,9 @@ def extract_comments(
                 else b""
             )
             ids_bytes = (
-                zf.read("word/commentsIds.xml") if "word/commentsIds.xml" in names else b""
+                zf.read("word/commentsIds.xml")
+                if "word/commentsIds.xml" in names
+                else b""
             )
             document_bytes = (
                 zf.read("word/document.xml") if "word/document.xml" in names else b""
@@ -404,7 +406,9 @@ def extract_comments(
 
         elif version == WordVersion.EXTENDED:
             if document_bytes:
-                para_to_comment.update(_build_para_to_comment_from_document(document_bytes))
+                para_to_comment.update(
+                    _build_para_to_comment_from_document(document_bytes)
+                )
             if debug:
                 _debug_dump(
                     "para_to_comment after _build_para_to_comment_from_document",
@@ -415,7 +419,10 @@ def extract_comments(
                     "commentsExtended paraId / paraIdParent pairs",
                     str(
                         [
-                            (ce.get(f"{{{W15}}}paraId"), ce.get(f"{{{W15}}}paraIdParent"))
+                            (
+                                ce.get(f"{{{W15}}}paraId"),
+                                ce.get(f"{{{W15}}}paraIdParent"),
+                            )
                             for ce in ext_root.findall(_tag(W15, "commentEx"))
                         ]
                     ),
