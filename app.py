@@ -47,12 +47,6 @@ document_terms = st.Page(
 topic_explorer = st.Page(
     "pages/topic_explorer.py", title="Topic Explorer", icon=":material/explore:"
 )
-position_check = st.Page(
-    "pages/position_check.py", title="Check Proposition", icon=":material/fact_check:"
-)
-issues_overview = st.Page(
-    "pages/issues_overview.py", title="Issues Overview", icon=":material/gavel:"
-)
 search = st.Page("pages/search.py", title="Search", icon=":material/search:")
 
 pg = st.navigation(
@@ -60,8 +54,6 @@ pg = st.navigation(
         doc_stats,
         document_terms,
         topic_explorer,
-        position_check,
-        issues_overview,
         search,
     ]
 )

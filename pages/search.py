@@ -77,14 +77,15 @@ st.subheader("Search")
 global_bytes = get_file_bytes()
 global_name = get_file_name()
 
+# Sidebar — file upload
 if global_name:
-    st.caption(f"📄 {global_name}")
+    st.sidebar.caption(f"📄 {global_name}")
 
-uploaded = st.file_uploader(
+uploaded = st.sidebar.file_uploader(
     "Add more files" if global_name else "Upload documents",
     type=["docx", "doc"],
     accept_multiple_files=True,
-    label_visibility="collapsed" if global_name else "collapsed",
+    label_visibility="collapsed",
 )
 
 # Persist extra uploaded files across navigations
@@ -109,16 +110,19 @@ if not files_to_use:
 
 if not uploaded and stored_extra:
     names = ", ".join(n for n, _ in stored_extra)
-    col_info, col_clear = st.columns([6, 1])
-    col_info.caption(f"Also using: {names}")
-    if col_clear.button("Clear", key="search_clear_files"):
+    st.sidebar.caption(f"Also: {names}")
+    if st.sidebar.button("Clear extra files", key="search_clear_files"):
         del st.session_state["_search_stored_files"]
         st.rerun()
 
-# Sidebar
-_saved_max = st.session_state.get("_search_pref_max_results", 20)
-max_results = st.sidebar.slider("Max results", 5, 50, _saved_max)
-st.session_state["_search_pref_max_results"] = max_results
+# Sidebar — per-page preference
+_saved_per_page = st.session_state.get("_search_pref_per_page", 10)
+per_page = st.sidebar.selectbox(
+    "Results per page",
+    options=[5, 10, 20, 50],
+    index=[5, 10, 20, 50].index(_saved_per_page) if _saved_per_page in [5, 10, 20, 50] else 1,
+)
+st.session_state["_search_pref_per_page"] = per_page
 
 # Build corpus: list of (doc_name, para_text)
 corpus: list[tuple[str, str]] = []
@@ -191,53 +195,84 @@ if not query or not query.strip():
 
 q = query.strip()
 
-# Run search
-if method == "Keyword":
-    pattern = re.compile(re.escape(q), re.IGNORECASE)
-    hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)][:max_results]
+# Build a key that uniquely identifies this search. Hits are cached in session
+# state so pagination never re-runs the search.
+_score_key = round(min_score, 2) if method in ("Relevance", "Semantic") else 0.0
+_model_key = model_name if method == "Semantic" else ""
+_corpus_hash = hash(tuple(texts))
+search_key = (q, method, _score_key, _model_key, _corpus_hash)
 
-elif method == "Regex":
-    try:
-        pattern = re.compile(q, re.IGNORECASE)
-    except re.error as e:
-        st.warning(f"Invalid regex: {e}")
-        st.stop()
-    hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)][:max_results]
+if st.session_state.get("_search_hits_key") != search_key:
+    # Parameters changed — run the search and cache results.
+    if method == "Keyword":
+        pattern = re.compile(re.escape(q), re.IGNORECASE)
+        hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
 
-elif method == "Relevance":
-    scores = bm25_scores(texts, q)
-    ranked = np.argsort(-scores)
-    all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
-    hits = [(i, s) for i, s in all_positive if s >= min_score][:max_results]
-    if not hits and all_positive:
-        st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
-        st.stop()
+    elif method == "Regex":
+        try:
+            pattern = re.compile(q, re.IGNORECASE)
+        except re.error as e:
+            st.warning(f"Invalid regex: {e}")
+            st.stop()
+        hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
 
-else:  # Semantic
-    with st.spinner("Embedding…"):
-        corpus_embs = _embed(tuple(texts), model_name)
-        encoder = get_sentence_transformer(model_name)
-        q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
-    sims = corpus_embs @ q_emb
-    ranked = np.argsort(-sims)
-    all_ranked = [(int(i), float(sims[i])) for i in ranked]
-    hits = [(i, s) for i, s in all_ranked if s >= min_score][:max_results]
-    if not hits and any(s > 0 for _, s in all_ranked):
-        st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
-        st.stop()
+    elif method == "Relevance":
+        scores = bm25_scores(texts, q)
+        ranked = np.argsort(-scores)
+        all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
+        hits = [(i, s) for i, s in all_positive if s >= min_score]
+        if not hits and all_positive:
+            st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+            st.stop()
+
+    else:  # Semantic
+        with st.spinner("Embedding…"):
+            corpus_embs = _embed(tuple(texts), model_name)
+            encoder = get_sentence_transformer(model_name)
+            q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
+        sims = corpus_embs @ q_emb
+        ranked = np.argsort(-sims)
+        all_ranked = [(int(i), float(sims[i])) for i in ranked]
+        hits = [(i, s) for i, s in all_ranked if s >= min_score]
+        if not hits and any(s > 0 for _, s in all_ranked):
+            st.info(f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar.")
+            st.stop()
+
+    st.session_state["_search_hits"] = hits
+    st.session_state["_search_hits_key"] = search_key
+    st.session_state["_search_page"] = 0
+else:
+    hits = st.session_state["_search_hits"]
 
 if not hits:
     st.info("No matches found.")
     st.stop()
 
-st.caption(f"{len(hits)} result{'s' if len(hits) != 1 else ''}")
+total_hits = len(hits)
+total_pages = max(1, -(-total_hits // per_page))  # ceiling division
+
+page = st.session_state.get("_search_page", 0)
+page = max(0, min(page, total_pages - 1))
+
+page_hits = hits[page * per_page : (page + 1) * per_page]
+
+col_count, col_prev, col_page, col_next = st.columns([4, 1, 2, 1])
+col_count.caption(f"{total_hits} result{'s' if total_hits != 1 else ''}")
+if total_pages > 1:
+    if col_prev.button("← Prev", disabled=page == 0, key="search_prev"):
+        st.session_state["_search_page"] = page - 1
+        st.rerun()
+    col_page.caption(f"Page {page + 1} of {total_pages}", )
+    if col_next.button("Next →", disabled=page >= total_pages - 1, key="search_next"):
+        st.session_state["_search_page"] = page + 1
+        st.rerun()
 
 # Assign a color to each unique document name
 unique_docs = list(dict.fromkeys(doc_names))
 doc_color = {name: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, name in enumerate(unique_docs)}
 
 # Results
-for idx, score in hits:
+for idx, score in page_hits:
     doc_name = doc_names[idx]
     passage = texts[idx]
     color = doc_color[doc_name]

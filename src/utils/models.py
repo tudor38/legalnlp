@@ -8,7 +8,7 @@ import logging
 
 import spacy
 import streamlit as st
-from sentence_transformers import CrossEncoder, SentenceTransformer
+from sentence_transformers import SentenceTransformer
 
 # Suppress the "LOAD REPORT" stdout noise and transformer info logs that
 # sentence-transformers 5.x prints on every model load.
@@ -27,12 +27,6 @@ def _quiet():
 def get_sentence_transformer(model_name: str) -> SentenceTransformer:
     with _quiet():
         return SentenceTransformer(model_name)
-
-
-@st.cache_resource(show_spinner=False, max_entries=4)
-def get_cross_encoder(model_name: str) -> CrossEncoder:
-    with _quiet():
-        return CrossEncoder(model_name)
 
 
 @st.cache_resource(show_spinner=False, max_entries=4)

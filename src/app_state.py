@@ -72,9 +72,6 @@ KEY_MOVE_TL_FIELDS = "move_tl_fields"
 KEY_TOPIC_RANK_LIMIT = "topic_rank_limit"
 KEY_TOPIC_SEMANTIC_MIN = "topic_semantic_min"
 
-# Issues overview page
-KEY_ASSESSED_ISSUES = "assessed_issues"
-
 # ---------------------------------------------------------------------------
 # Model name constants
 # ---------------------------------------------------------------------------
@@ -83,11 +80,6 @@ KEY_ASSESSED_ISSUES = "assessed_issues"
 MODEL_MINILM = "all-MiniLM-L6-v2"
 MODEL_MPNET = "all-mpnet-base-v2"
 SENTENCE_TRANSFORMER_MODELS = [MODEL_MINILM, MODEL_MPNET]
-
-# Cross-encoder models (used in position check, issues overview)
-MODEL_DEBERTA_BASE = "cross-encoder/nli-deberta-v3-base"
-MODEL_DEBERTA_SMALL = "cross-encoder/nli-deberta-v3-small"
-CROSS_ENCODER_MODELS = [MODEL_DEBERTA_BASE, MODEL_DEBERTA_SMALL]
 
 
 # ---------------------------------------------------------------------------

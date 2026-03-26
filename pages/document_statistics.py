@@ -503,7 +503,7 @@ def _render_moves(
 _stored_name = st.session_state.get(KEY_DOC_NAME)
 if _stored_name and not st.session_state.get("_doc_upload"):
     st.sidebar.caption(f"📄 {_stored_name}")
-    if st.sidebar.button("Clear file", key="stats_clear_file", use_container_width=True):
+    if st.sidebar.button("Clear file", key="stats_clear_file", width="stretch"):
         set_file_bytes(None)
         set_file_name(None)
         st.rerun()
@@ -583,5 +583,4 @@ if file_bytes:
     }
 
     if main_tab in tab_renderers:
-        st.divider()
         tab_renderers[main_tab]()
