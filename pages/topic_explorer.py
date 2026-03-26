@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import io
-import json
 import re
 import time
 from collections.abc import Sequence
@@ -152,43 +151,27 @@ def _render_interactive_map(
             plot_embeddings,
             *plot_label_layers,
             hover_text=np.array(plot_docs, dtype=object),
-            extra_point_data=pd.DataFrame({"paragraph_idx": list(matched_indices)}),
-            on_click="openDoc(hoverData.paragraph_idx[index]);",
             enable_search=False,
             noise_label="Noise",
             noise_color="#cccccc",
-            sub_title="Click a point to open the passage in context. Zoom in to reveal finer topic labels.",
             initial_zoom_fraction=zoom,
         )
-        all_docs_json = json.dumps(list(all_docs))
-        inject_script = f"""<script>
-window.__ALL_DOCS__ = {all_docs_json};
-window.openDoc = function(paraIdx) {{
-  var allDocs = window.__ALL_DOCS__;
-  var rows = allDocs.map(function(text, i) {{
-    var safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    var idAttr = i === paraIdx ? 'id="active"' : '';
-    var cls = i === paraIdx ? ' class="active"' : '';
-    return '<p ' + idAttr + cls + '>' + safe + '</p>';
-  }});
-  var css = '<style>body{{font-family:Georgia,serif;max-width:900px;margin:40px auto;padding:0 20px;line-height:1.8;color:#333}}p{{margin:1em 0;padding:4px 0}}.active{{background:#fffde7;border-left:4px solid #f9a825;padding:.5em 1em;border-radius:0 4px 4px 0}}</style>';
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'+css+'</head><body>'+rows.join('')+'</body></html>';
-  var blob = new Blob([html],{{type:'text/html'}});
-  window.open(URL.createObjectURL(blob)+'#active','_blank');
-}};
-</script>"""
-        return str(plot).replace("</body>", inject_script + "</body>", 1)
+        return str(plot)
     except (IndexError, ValueError):
         return None
 
 
 def _default_granularity(n_docs: int) -> tuple[int, int, int]:
-    coarse = max(max(2, n_docs // 6), n_docs // 40)
-    medium = max(max(2, n_docs // 9), n_docs // 80)
-    fine = max(2, n_docs // 150)
-    medium = min(medium, coarse)
-    fine = min(fine, medium)
-    return coarse, medium, fine
+    highlevel = max(4, n_docs // 4)
+    midlevel = max(3, n_docs // 10)
+    lowlevel = 2
+    # Enforce strictly decreasing so all three levels stay distinct after set deduplication
+    midlevel = min(midlevel, highlevel - 1)
+    if midlevel <= lowlevel:
+        midlevel = lowlevel + 1
+    if highlevel <= midlevel:
+        highlevel = midlevel + 1
+    return highlevel, midlevel, lowlevel
 
 
 def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
@@ -297,6 +280,8 @@ if len(docs) < 12:
     )
     st.stop()
 
+st.sidebar.metric("Passages", len(docs))
+
 def _on_search_submit() -> None:
     st.session_state["_topic_active_query"] = st.session_state.get("topic_search_query", "")
     st.session_state["_topic_active_method"] = st.session_state.get("topic_search_method") or "Keyword"
@@ -343,44 +328,47 @@ if active_method == "Semantic":
     )
 
 normalized_query = active_query.strip().lower()
-coarse_default, medium_default, fine_default = _default_granularity(len(docs))
-st.sidebar.markdown("### Topics (Broad to Detailed)")
-st.sidebar.caption(
-    "Adjust topic level granularity.\n"
-    "- Higher value: fewer, broader topics.\n"
-    "- Lower value: more, narrower topics."
-)
-coarse_size = st.sidebar.slider(
-    "Broad topics",
-    1,
-    max(3, min(50, len(docs) // 4)),
-    st.session_state.get("_topic_pref_coarse_size", coarse_default),
-    key="topic_coarse_size",
-    help="Start here for high-level topics. Increase to merge topics into larger groups.",
-)
-st.session_state["_topic_pref_coarse_size"] = coarse_size
+highlevel_default, midlevel_default, lowlevel_default = _default_granularity(len(docs))
+_highlevel_max = max(3, min(50, len(docs) // 4))
+_midlevel_max  = max(3, min(30, len(docs) // 6))
+_lowlevel_max  = max(3, min(15, len(docs) // 10))
 
-medium_size = st.sidebar.slider(
-    "Mid-level topics",
-    1,
-    max(3, min(30, len(docs) // 6)),
-    st.session_state.get("_topic_pref_medium_size", medium_default),
-    key="topic_medium_size",
-    help="Balances specificity and stability. Usually between broad and detailed topic values.",
-)
-st.session_state["_topic_pref_medium_size"] = medium_size
+st.sidebar.markdown("### Topic Levels")
 
-fine_size = st.sidebar.slider(
-    "Detailed topics",
+_highlevel_detail = st.sidebar.slider(
+    "High-level",
     1,
-    max(3, min(15, len(docs) // 10)),
-    st.session_state.get("_topic_pref_fine_size", fine_default),
-    key="topic_fine_size",
-    help="Use lower values to surface niche sub-topics. Too low can produce noisy clusters.",
+    _highlevel_max,
+    st.session_state.get("_topic_pref_highlevel", _highlevel_max + 1 - highlevel_default),
+    key="topic_highlevel",
+    help="Move right for more high-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_fine_size"] = fine_size
+st.session_state["_topic_pref_highlevel"] = _highlevel_detail
+highlevel_size = max(2, _highlevel_max + 1 - _highlevel_detail)
 
-granularity_sizes = sorted({coarse_size, medium_size, fine_size}, reverse=True)
+_midlevel_detail = st.sidebar.slider(
+    "Mid-level",
+    1,
+    _midlevel_max,
+    st.session_state.get("_topic_pref_midlevel", _midlevel_max + 1 - midlevel_default),
+    key="topic_midlevel",
+    help="Move right for more mid-level topics; move left for fewer, broader groupings.",
+)
+st.session_state["_topic_pref_midlevel"] = _midlevel_detail
+midlevel_size = max(2, _midlevel_max + 1 - _midlevel_detail)
+
+_lowlevel_detail = st.sidebar.slider(
+    "Low-level",
+    1,
+    _lowlevel_max,
+    st.session_state.get("_topic_pref_lowlevel", _lowlevel_max + 1 - lowlevel_default),
+    key="topic_lowlevel",
+    help="Move right for more low-level topics; move left for fewer, broader groupings.",
+)
+st.session_state["_topic_pref_lowlevel"] = _lowlevel_detail
+lowlevel_size = max(2, _lowlevel_max + 1 - _lowlevel_detail)
+
+granularity_sizes = [highlevel_size, midlevel_size, lowlevel_size]
 
 with st.sidebar.expander("Seed words (advanced)", expanded=False):
     st.caption(
@@ -450,17 +438,17 @@ else:
     label_layers = st.session_state["_topic_label_layers"]
     topic_counts = st.session_state["_topic_counts"]
 
-st.sidebar.markdown("### Topics")
+st.sidebar.markdown("### Topics Found")
 sidebar_stats_cols = st.sidebar.columns(len(granularity_sizes))
 for idx, size in enumerate(granularity_sizes):
-    topic_name = "Broad" if idx == 0 else "Mid" if idx == 1 else "Detailed"
+    topic_name = "High-level" if idx == 0 else "Mid-level" if idx == 1 else "Low-level"
     sidebar_stats_cols[idx].metric(topic_name, topic_counts[idx])
 
 has_noise = any((labels == "Noise").any() for labels in label_layers)
 if has_noise:
     st.sidebar.caption(
         "Noise: text that doesn't cluster into any topic. "
-        "Raise minimum text length or adjust granularity to reduce it."
+        "Raise minimum text length or adjust topic levels to reduce noise."
     )
 
 score_map: dict[int, float] = {}
@@ -506,33 +494,32 @@ def _show_map(
     html_content: str | None,
 ) -> None:
     expanded = n_plot >= 100
-    with st.expander("Topic map", expanded=expanded):
-        if html_content is None:
-            st.caption("Interactive map is not available for this dataset.")
-            with st.spinner("Building static map…"):
-                png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
-            st.image(base64.b64decode(png_b64), width="stretch")
-            return
+    if html_content is None:
+        st.caption("Interactive map is not available for this dataset. Adjusting topic sliders could enable the option to view an interactive map.")
+        with st.spinner("Building static map…"):
+            png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
+        st.image(base64.b64decode(png_b64), width="stretch")
+        return
 
-        _map_options = ["Interactive", "Static"]
-        st.session_state.setdefault("_topic_map_type_pref", "Interactive")
-        _map_index = _map_options.index(st.session_state["_topic_map_type_pref"])
-        map_type = st.radio(
-            "Map type",
-            _map_options,
-            index=_map_index,
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        st.session_state["_topic_map_type_pref"] = map_type
+    _map_options = ["Interactive", "Static"]
+    st.session_state.setdefault("_topic_map_type_pref", "Interactive")
+    _map_index = _map_options.index(st.session_state["_topic_map_type_pref"])
+    map_type = st.radio(
+        "Map type",
+        _map_options,
+        index=_map_index,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    st.session_state["_topic_map_type_pref"] = map_type
 
-        if map_type == "Static":
-            with st.spinner("Building static map…"):
-                png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
-            st.image(base64.b64decode(png_b64), width="stretch")
-            return
+    if map_type == "Static":
+        with st.spinner("Building static map…"):
+            png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
+        st.image(base64.b64decode(png_b64), width="stretch")
+        return
 
-        components.html(html_content, height=860, scrolling=False)
+    components.html(html_content, height=860, scrolling=False)
 
 
 st.subheader("Topic Explorer")
@@ -586,7 +573,7 @@ def _results_section(
     max_rows: int,
     granularity_sizes: list[int],
 ) -> None:
-    topic_columns = ["Broad topics", "Mid-level topics", "Detailed topics"]
+    topic_columns = ["High-level topics", "Mid-level topics", "Low-level topics"]
     results_df = pd.DataFrame(
         {
             "paragraph_idx": np.arange(len(docs)),
@@ -608,6 +595,7 @@ def _results_section(
         results_df["score"] = results_df["paragraph_idx"].map(score_map)
         results_df = results_df.sort_values("score", ascending=False).reset_index(drop=True)
 
+    selected_topics: list[str] = []
     st.divider()
     st.markdown("#### Filter")
     available_topic_cols = [col for col in topic_columns if col in results_df.columns]
@@ -652,7 +640,8 @@ def _results_section(
     sort_asc = scol2.toggle("Ascending", value=False, key="topic_sort_asc")
     results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(drop=True)
 
-    st.caption(f"{len(results_df)} passages")
+    if search_query or selected_topics:
+        st.caption(f"{len(results_df)} passages")
     st.dataframe(
         results_df.head(max_rows),
         width="stretch",
