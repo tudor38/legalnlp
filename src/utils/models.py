@@ -26,7 +26,10 @@ def _quiet():
 @st.cache_resource(show_spinner=False, max_entries=4)
 def get_sentence_transformer(model_name: str) -> SentenceTransformer:
     with _quiet():
-        return SentenceTransformer(model_name)
+        try:
+            return SentenceTransformer(model_name)
+        except Exception as e:
+            raise RuntimeError(f"Could not load model '{model_name}': {e}") from None
 
 
 @st.cache_resource(show_spinner=False, max_entries=4)

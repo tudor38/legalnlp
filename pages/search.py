@@ -13,43 +13,12 @@ import re
 
 import numpy as np
 import streamlit as st
-import Stemmer as _PyStemmer
-from spacy.lang.en.stop_words import STOP_WORDS
 
 from src.app_state import MODEL_MINILM, MODEL_MPNET, get_file_bytes, get_file_name
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
-from src.utils.text import TOPIC_PALETTE, bm25_scores, tokenize
-
-
-_stemmer = _PyStemmer.Stemmer("english")
-
-
-def _highlight_term(text: str, query: str, color: str = "") -> str:
-    if not query.strip():
-        return text
-    style = f' style="background:{color}"' if color else ""
-    return re.compile(re.escape(query), flags=re.IGNORECASE).sub(
-        lambda m: f"<mark{style}>{m.group(0)}</mark>", text
-    )
-
-
-def _highlight_query_tokens(text: str, query: str, color: str = "") -> str:
-    stemmed_terms = {
-        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
-    }
-    if not stemmed_terms:
-        return text
-    style = f' style="background:{color}"' if color else ""
-
-    def _replace(m: re.Match) -> str:
-        word = m.group(0)
-        if _stemmer.stemWord(word.lower()) in stemmed_terms:
-            return f"<mark{style}>{word}</mark>"
-        return word
-
-    return re.sub(r"\b\w+\b", _replace, text)
+from src.utils.text import TOPIC_PALETTE, bm25_scores, highlight_query_tokens, highlight_term
 
 
 # ---------------------------------------------------------------------------
@@ -182,12 +151,25 @@ if method in ("Relevance", "Semantic"):
 _model_options = [MODEL_MINILM, MODEL_MPNET]
 if method == "Semantic":
     _saved_model = st.session_state.get("_search_pref_model")
-    model_name = st.sidebar.selectbox(
+    _selected = st.sidebar.selectbox(
         "Embedding model",
-        _model_options,
+        _model_options + ["Custom…"],
         index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
         key="search_model",
     )
+    if _selected == "Custom…":
+        model_name = st.sidebar.text_input(
+            "HuggingFace model ID",
+            value=st.session_state.get("_search_pref_custom_model", ""),
+            placeholder="e.g. BAAI/bge-small-en-v1.5",
+            key="search_custom_model",
+        ).strip()
+        st.session_state["_search_pref_custom_model"] = model_name
+        if not model_name:
+            st.info("Enter a HuggingFace model ID above to use a custom embedding model.")
+            st.stop()
+    else:
+        model_name = _selected
     st.session_state["_search_pref_model"] = model_name
 
 if not query or not query.strip():
@@ -226,10 +208,14 @@ if st.session_state.get("_search_hits_key") != search_key:
             st.stop()
 
     else:  # Semantic
-        with st.spinner("Embedding…"):
-            corpus_embs = _embed(tuple(texts), model_name)
-            encoder = get_sentence_transformer(model_name)
-            q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
+        try:
+            with st.spinner("Embedding…"):
+                corpus_embs = _embed(tuple(texts), model_name)
+                encoder = get_sentence_transformer(model_name)
+                q_emb = encoder.encode([q], show_progress_bar=False, normalize_embeddings=True)[0]
+        except RuntimeError as e:
+            st.error(str(e))
+            st.stop()
         sims = corpus_embs @ q_emb
         ranked = np.argsort(-sims)
         all_ranked = [(int(i), float(sims[i])) for i in ranked]
@@ -278,16 +264,16 @@ for idx, score in page_hits:
     color = doc_color[doc_name]
 
     if method == "Keyword":
-        display = _highlight_term(passage, q, color)
+        display = highlight_term(passage, q, color)
         score_str = ""
     elif method == "Regex":
         display = pattern.sub(lambda m, c=color: f'<mark style="background:{c}">{m.group(0)}</mark>', passage)
         score_str = ""
     elif method == "Relevance":
-        display = _highlight_query_tokens(passage, q, color)
+        display = highlight_query_tokens(passage, q, color)
         score_str = f"{score:.2f}"
     else:  # Semantic
-        display = _highlight_query_tokens(passage, q, color)
+        display = highlight_query_tokens(passage, q, color)
         score_str = f"{score:.2f}"
 
     with st.container(border=True):

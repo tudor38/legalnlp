@@ -12,15 +12,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
-import Stemmer as _PyStemmer
-from spacy.lang.en.stop_words import STOP_WORDS
 from umap import UMAP
 
 from src.app_state import MODEL_MINILM, MODEL_MPNET
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
-from src.utils.text import TOPIC_PALETTE, bm25_scores, tokenize
+from src.utils.text import TOPIC_PALETTE, bm25_scores, highlight_query_tokens, highlight_term, highlight_topic_keywords, tokenize
 
 
 def _clean_docs(paragraphs: Sequence[str], min_chars: int) -> list[str]:
@@ -180,52 +178,6 @@ def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
     }
 
 
-def _highlight_topic_keywords(text: str, topic_label: str, color: str) -> str:
-    """Highlight words from the topic label in the text using a topic-specific color."""
-    if not topic_label or topic_label == "Noise":
-        return text
-    stemmed_keywords = {
-        _stemmer.stemWord(w.lower())
-        for w in topic_label.split()
-        if w.lower() not in STOP_WORDS and len(w) > 2
-    }
-    if not stemmed_keywords:
-        return text
-
-    def _replace(m: re.Match) -> str:
-        word = m.group(0)
-        if _stemmer.stemWord(word.lower()) in stemmed_keywords:
-            return f'<mark style="background:{color}">{word}</mark>'
-        return word
-
-    return re.sub(r"\b\w+\b", _replace, text)
-
-
-def _highlight_term(text: str, query: str) -> str:
-    if not query.strip():
-        return text
-    pattern = re.compile(re.escape(query), flags=re.IGNORECASE)
-    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
-
-
-_stemmer = _PyStemmer.Stemmer("english")
-
-
-def _highlight_query_tokens(text: str, query: str) -> str:
-    stemmed_terms = {
-        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
-    }
-    if not stemmed_terms:
-        return text
-
-    def _replace(m: re.Match) -> str:
-        word = m.group(0)
-        if _stemmer.stemWord(word.lower()) in stemmed_terms:
-            return f"<mark>{word}</mark>"
-        return word
-
-    return re.sub(r"\b\w+\b", _replace, text)
-
 
 file_bytes = require_document()
 
@@ -259,13 +211,26 @@ min_chars = st.sidebar.slider(
 st.session_state["_topic_pref_min_chars"] = min_chars
 
 _saved_model = st.session_state.get("_topic_pref_embedding_model")
-embedding_model_name = st.sidebar.selectbox(
+_selected_model = st.sidebar.selectbox(
     "Embedding model",
-    options=_model_options,
+    options=_model_options + ["Custom…"],
     index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
     key="topic_embedding_model",
     help="This model converts each paragraph into vectors before topic clustering.",
 )
+if _selected_model == "Custom…":
+    embedding_model_name = st.sidebar.text_input(
+        "HuggingFace model ID",
+        value=st.session_state.get("_topic_pref_custom_model", ""),
+        placeholder="e.g. BAAI/bge-small-en-v1.5",
+        key="topic_custom_model",
+    ).strip()
+    st.session_state["_topic_pref_custom_model"] = embedding_model_name
+    if not embedding_model_name:
+        st.info("Enter a HuggingFace model ID in the sidebar to use a custom embedding model.")
+        st.stop()
+else:
+    embedding_model_name = _selected_model
 st.session_state["_topic_pref_embedding_model"] = embedding_model_name
 
 if analysis_unit == "Sentence":
@@ -419,25 +384,30 @@ _topic_state_key = hashlib.md5(
 ).hexdigest()
 
 if st.session_state.get("_topic_state_key") != _topic_state_key:
-    with st.spinner("Embedding and modeling topics..."):
-        docs_tuple = tuple(docs)
-        embeddings = _embed_docs(docs_tuple, embedding_model_name)
-        reduced_embeddings = _reduce_to_2d(
-            embeddings=embeddings,
-            n_neighbors=min(30, max(5, len(docs) // 25)),
-            min_dist=0.05,
-        )
-
-        label_layers: list[np.ndarray] = []
-        topic_counts: list[int] = []
-        for min_topic_size in granularity_sizes:
-            topic_model, topics = _fit_topics(
-                docs_tuple, embeddings, min_topic_size, seed_topic_list
+    try:
+        with st.spinner("Embedding and modeling topics..."):
+            docs_tuple = tuple(docs)
+            embeddings = _embed_docs(docs_tuple, embedding_model_name)
+            reduced_embeddings = _reduce_to_2d(
+                embeddings=embeddings,
+                n_neighbors=min(30, max(5, len(docs) // 25)),
+                min_dist=0.05,
             )
-            labels = _topic_labels(topic_model, topics)
-            label_layers.append(labels)
-            n_topics = len({t for t in topics if t != -1})
-            topic_counts.append(n_topics)
+
+            label_layers: list[np.ndarray] = []
+            topic_counts: list[int] = []
+            for min_topic_size in granularity_sizes:
+                topic_model, topics = _fit_topics(
+                    docs_tuple, embeddings, min_topic_size, seed_topic_list
+                )
+                labels = _topic_labels(topic_model, topics)
+                label_layers.append(labels)
+                n_topics = len({t for t in topics if t != -1})
+                topic_counts.append(n_topics)
+
+    except RuntimeError as e:
+        st.error(str(e))
+        st.stop()
 
     st.session_state.update({
         "_topic_state_key": _topic_state_key,
@@ -688,7 +658,7 @@ def _results_section(
         para_idx = int(row["paragraph_idx"])
         text = str(row["text"])
         if search_method in ("Relevance", "Semantic"):
-            highlighted = _highlight_query_tokens(text, search_query)
+            highlighted = highlight_query_tokens(text, search_query)
         elif search_method == "Regex":
             try:
                 highlighted = re.compile(
@@ -697,10 +667,10 @@ def _results_section(
             except re.error:
                 highlighted = text
         else:
-            highlighted = _highlight_term(text, search_query)
+            highlighted = highlight_term(text, search_query)
         topic_label = finest_labels[para_idx] if para_idx < len(finest_labels) else ""
         color = color_map.get(str(topic_label), "#ffe066")
-        highlighted = _highlight_topic_keywords(highlighted, str(topic_label), color)
+        highlighted = highlight_topic_keywords(highlighted, str(topic_label), color)
         topics = " → ".join(f"{row[col]}" for col in topic_cols)
         lines.append(f"#### Para {para_idx} — {topics}\n\n{highlighted}")
     st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)

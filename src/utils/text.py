@@ -7,6 +7,10 @@ import re
 from collections.abc import Sequence
 
 import numpy as np
+import Stemmer as _PyStemmer
+from spacy.lang.en.stop_words import STOP_WORDS
+
+_stemmer = _PyStemmer.Stemmer("english")
 
 TOPIC_PALETTE = [
     "#ffe066",
@@ -20,6 +24,52 @@ TOPIC_PALETTE = [
     "#ffb5e8",
     "#b5f0ff",
 ]
+
+
+def highlight_term(text: str, query: str, color: str = "") -> str:
+    if not query.strip():
+        return text
+    style = f' style="background:{color}"' if color else ""
+    return re.compile(re.escape(query), flags=re.IGNORECASE).sub(
+        lambda m: f"<mark{style}>{m.group(0)}</mark>", text
+    )
+
+
+def highlight_query_tokens(text: str, query: str, color: str = "") -> str:
+    stemmed_terms = {
+        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
+    }
+    if not stemmed_terms:
+        return text
+    style = f' style="background:{color}"' if color else ""
+
+    def _replace(m: re.Match) -> str:
+        word = m.group(0)
+        if _stemmer.stemWord(word.lower()) in stemmed_terms:
+            return f"<mark{style}>{word}</mark>"
+        return word
+
+    return re.sub(r"\b\w+\b", _replace, text)
+
+
+def highlight_topic_keywords(text: str, topic_label: str, color: str) -> str:
+    if not topic_label or topic_label == "Noise":
+        return text
+    stemmed_keywords = {
+        _stemmer.stemWord(w.lower())
+        for w in topic_label.split()
+        if w.lower() not in STOP_WORDS and len(w) > 2
+    }
+    if not stemmed_keywords:
+        return text
+
+    def _replace(m: re.Match) -> str:
+        word = m.group(0)
+        if _stemmer.stemWord(word.lower()) in stemmed_keywords:
+            return f'<mark style="background:{color}">{word}</mark>'
+        return word
+
+    return re.sub(r"\b\w+\b", _replace, text)
 
 
 def tokenize(text: str) -> list[str]:
