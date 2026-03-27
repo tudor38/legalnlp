@@ -53,6 +53,8 @@ from src.stats.config import CFG
 
 _ALLOWED_FILETYPES = CFG.display.allowed_filetypes
 _CLOSED_DATE_OFFSET = CFG.display.closed_date_offset_days
+_MAX_UPLOAD_MB = 25
+_KEY_UPLOAD_SIZE_ERROR = "_upload_size_error"
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +184,12 @@ def _store_date_range():
 def _store_uploaded_file():
     f = st.session_state.get("_doc_upload")
     if f is not None:
+        if f.size > _MAX_UPLOAD_MB * 1024 * 1024:
+            st.session_state[_KEY_UPLOAD_SIZE_ERROR] = (
+                f"'{f.name}' is {f.size / (1024 * 1024):.1f} MB — "
+                f"maximum allowed size is {_MAX_UPLOAD_MB} MB."
+            )
+            return
         st.cache_data.clear()
         set_file_bytes(f.read())
         set_file_name(f.name)
@@ -533,6 +541,9 @@ else:
         key="_doc_upload",
         on_change=_store_uploaded_file,
     )
+    _size_err = st.session_state.pop(_KEY_UPLOAD_SIZE_ERROR, None)
+    if _size_err:
+        st.sidebar.error(_size_err)
 
 file_bytes = get_file_bytes()
 

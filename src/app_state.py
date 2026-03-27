@@ -68,6 +68,61 @@ KEY_MOVE_TL_EXPANDED = "move_tl_expanded"
 KEY_MOVE_TL_EXPAND_ALL = "move_tl_expand_all"
 KEY_MOVE_TL_FIELDS = "move_tl_fields"
 
+# ---------------------------------------------------------------------------
+# Search page keys
+# ---------------------------------------------------------------------------
+
+KEY_SEARCH_STORED_FILES = "_search_stored_files"
+KEY_SEARCH_PREF_PER_PAGE = "_search_pref_per_page"
+KEY_SEARCH_PREF_QUERY = "_search_pref_query"
+KEY_SEARCH_PREF_METHOD = "_search_pref_method"
+KEY_SEARCH_PREF_MIN_SCORE = "_search_pref_min_score"
+KEY_SEARCH_PREF_MODEL = "_search_pref_model"
+KEY_SEARCH_PREF_CUSTOM_MODEL = "_search_pref_custom_model"
+KEY_SEARCH_HITS = "_search_hits"
+KEY_SEARCH_HITS_KEY = "_search_hits_key"
+KEY_SEARCH_PAGE = "_search_page"
+KEY_SEARCH_VIEW = "_search_view"
+
+# ---------------------------------------------------------------------------
+# Topic Explorer page keys
+# ---------------------------------------------------------------------------
+
+KEY_TOPIC_PREF_ANALYSIS_UNIT = "_topic_pref_analysis_unit"
+KEY_TOPIC_PREF_MIN_CHARS = "_topic_pref_min_chars"
+KEY_TOPIC_PREF_EMBEDDING_MODEL = "_topic_pref_embedding_model"
+KEY_TOPIC_PREF_CUSTOM_MODEL = "_topic_pref_custom_model"
+KEY_TOPIC_PREF_HIGHLEVEL = "_topic_pref_highlevel"
+KEY_TOPIC_PREF_MIDLEVEL = "_topic_pref_midlevel"
+KEY_TOPIC_PREF_LOWLEVEL = "_topic_pref_lowlevel"
+KEY_TOPIC_ACTIVE_QUERY = "_topic_active_query"
+KEY_TOPIC_ACTIVE_METHOD = "_topic_active_method"
+KEY_TOPIC_STATE_KEY = "_topic_state_key"
+KEY_TOPIC_DOCS = "_topic_docs"
+KEY_TOPIC_EMBEDDINGS = "_topic_embeddings"
+KEY_TOPIC_REDUCED = "_topic_reduced"
+KEY_TOPIC_LABEL_LAYERS = "_topic_label_layers"
+KEY_TOPIC_COUNTS = "_topic_counts"
+KEY_TOPIC_MAP_SIG = "_topic_map_sig"
+KEY_TOPIC_MAP_TYPE_PREF = "_topic_map_type_pref"
+KEY_TOPIC_HAD_SCORE = "_topic_had_score"
+# Widget keys also accessed directly in session state
+WKEY_TOPIC_SEARCH_METHOD = "topic_search_method"
+WKEY_TOPIC_SEARCH_QUERY = "topic_search_query"
+WKEY_TOPIC_SORT_COL = "topic_sort_col"
+WKEY_TOPIC_SORT_ASC = "topic_sort_asc"
+
+# ---------------------------------------------------------------------------
+# Document Terms page keys
+# ---------------------------------------------------------------------------
+
+KEY_DT_SPACY_MODEL = "_dt_spacy_model_pref"
+KEY_DT_CACHE_KEY = "_doc_terms_key"
+KEY_DT_DEFS = "_doc_terms_defs"
+KEY_DT_DATES = "_doc_terms_dates"
+KEY_DT_PARTIES = "_doc_terms_parties"
+KEY_DT_MONEY = "_doc_terms_money"
+KEY_DT_NUMBERS = "_doc_terms_numbers"
 
 # ---------------------------------------------------------------------------
 # Model name constants

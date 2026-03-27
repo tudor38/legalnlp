@@ -15,7 +15,21 @@ import re
 import numpy as np
 import streamlit as st
 
-from src.app_state import MODEL_MINILM, MODEL_MPNET, get_file_bytes, get_file_name
+from src.app_state import (
+    KEY_SEARCH_HITS,
+    KEY_SEARCH_HITS_KEY,
+    KEY_SEARCH_PREF_CUSTOM_MODEL,
+    KEY_SEARCH_PREF_METHOD,
+    KEY_SEARCH_PREF_MIN_SCORE,
+    KEY_SEARCH_PREF_MODEL,
+    KEY_SEARCH_PREF_QUERY,
+    KEY_SEARCH_STORED_FILES,
+    KEY_SEARCH_VIEW,
+    MODEL_MINILM,
+    MODEL_MPNET,
+    get_file_bytes,
+    get_file_name,
+)
 from src.comments.extract import extract_paragraphs
 from src.shared import DocxParseError
 from src.utils.models import get_sentence_transformer
@@ -33,9 +47,13 @@ from src.utils.text import (
 # Cached extraction
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False, max_entries=10)
-def _extract(file_bytes: bytes) -> list[str]:
+def _extract(file_bytes: bytes) -> list[tuple[int, str]]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
-    return [p.strip() for p in doc.paragraphs if len(p.strip()) >= CFG.search.min_para_chars]
+    return [
+        (i, p.strip())
+        for i, p in enumerate(doc.paragraphs)
+        if len(p.strip()) >= CFG.search.min_para_chars
+    ]
 
 
 @st.cache_data(show_spinner=False, max_entries=10)
@@ -65,13 +83,22 @@ uploaded = st.sidebar.file_uploader(
     label_visibility="collapsed",
 )
 
+_MAX_UPLOAD_MB = 25
+
 # Persist extra uploaded files across navigations
 if uploaded:
-    st.session_state["_search_stored_files"] = [
-        (f.name, f.getvalue()) for f in uploaded
+    oversized = [f for f in uploaded if f.size > _MAX_UPLOAD_MB * 1024 * 1024]
+    valid = [f for f in uploaded if f.size <= _MAX_UPLOAD_MB * 1024 * 1024]
+    for f in oversized:
+        st.sidebar.warning(
+            f"'{f.name}' ({f.size / (1024 * 1024):.1f} MB) exceeds the "
+            f"{_MAX_UPLOAD_MB} MB limit and was skipped."
+        )
+    st.session_state[KEY_SEARCH_STORED_FILES] = [
+        (f.name, f.getvalue()) for f in valid
     ]
 
-stored_extra: list[tuple[str, bytes]] = st.session_state.get("_search_stored_files", [])
+stored_extra: list[tuple[str, bytes]] = st.session_state.get(KEY_SEARCH_STORED_FILES, [])
 
 # Build corpus sources
 extra_files = [(f.name, f.getvalue()) for f in uploaded] if uploaded else stored_extra
@@ -89,33 +116,23 @@ if not uploaded and stored_extra:
     names = ", ".join(n for n, _ in stored_extra)
     st.sidebar.caption(f"Also: {names}")
     if st.sidebar.button("Clear extra files", key="search_clear_files"):
-        del st.session_state["_search_stored_files"]
+        del st.session_state[KEY_SEARCH_STORED_FILES]
         st.rerun()
 
-# Sidebar — per-page preference
-_saved_per_page = st.session_state.get("_search_pref_per_page", 10)
-per_page = st.sidebar.selectbox(
-    "Results per page",
-    options=[5, 10, 20, 50],
-    index=[5, 10, 20, 50].index(_saved_per_page)
-    if _saved_per_page in [5, 10, 20, 50]
-    else 1,
-)
-st.session_state["_search_pref_per_page"] = per_page
-
-# Build corpus: list of (doc_name, para_text)
-corpus: list[tuple[str, str]] = []
+# Build corpus: list of (doc_name, para_idx, para_text)
+corpus: list[tuple[str, int, str]] = []
 for name, file_bytes in files_to_use:
     try:
         paras = _extract(file_bytes)
     except DocxParseError:
         st.warning(f"'{name}' is not a valid Word document and was skipped.")
         continue
-    for p in paras:
-        corpus.append((name, p))
+    for para_idx, p in paras:
+        corpus.append((name, para_idx, p))
 
-doc_names = [name for name, _ in corpus]
-texts = [text for _, text in corpus]
+doc_names = [name for name, _, _ in corpus]
+para_indices = [para_idx for _, para_idx, _ in corpus]
+texts = [text for _, _, text in corpus]
 
 total_docs = len({n for n in doc_names})
 st.caption(
@@ -123,7 +140,7 @@ st.caption(
 )
 
 # Search input
-_saved_query = st.session_state.get("_search_pref_query", "")
+_saved_query = st.session_state.get(KEY_SEARCH_PREF_QUERY, "")
 query = st.text_input(
     "Query",
     value=_saved_query,
@@ -131,11 +148,11 @@ query = st.text_input(
     label_visibility="collapsed",
     key="search_query",
 )
-st.session_state["_search_pref_query"] = query
+st.session_state[KEY_SEARCH_PREF_QUERY] = query
 
 _method_options = ["Keyword", "Regex", "Relevance", "Semantic"]
-st.session_state.setdefault("_search_pref_method", "Keyword")
-st.session_state.setdefault("search_method", st.session_state["_search_pref_method"])
+st.session_state.setdefault(KEY_SEARCH_PREF_METHOD, "Keyword")
+st.session_state.setdefault("search_method", st.session_state[KEY_SEARCH_PREF_METHOD])
 method = (
     st.pills(
         "Search type",
@@ -146,11 +163,11 @@ method = (
     )
     or "Keyword"
 )
-st.session_state["_search_pref_method"] = method
+st.session_state[KEY_SEARCH_PREF_METHOD] = method
 
 min_score: float = 0.0
 if method in ("Relevance", "Semantic"):
-    _saved_min_score = st.session_state.get("_search_pref_min_score", 0.0)
+    _saved_min_score = st.session_state.get(KEY_SEARCH_PREF_MIN_SCORE, 0.0)
     min_score = st.sidebar.slider(
         "Minimum score",
         min_value=0.0,
@@ -159,11 +176,11 @@ if method in ("Relevance", "Semantic"):
         step=0.01,
         key="search_min_score",
     )
-    st.session_state["_search_pref_min_score"] = min_score
+    st.session_state[KEY_SEARCH_PREF_MIN_SCORE] = min_score
 
 _model_options = [MODEL_MINILM, MODEL_MPNET]
 if method == "Semantic":
-    _saved_model = st.session_state.get("_search_pref_model")
+    _saved_model = st.session_state.get(KEY_SEARCH_PREF_MODEL)
     _selected = st.sidebar.selectbox(
         "Embedding model",
         _model_options + ["Custom…"],
@@ -175,11 +192,11 @@ if method == "Semantic":
     if _selected == "Custom…":
         model_name = st.sidebar.text_input(
             "HuggingFace model ID",
-            value=st.session_state.get("_search_pref_custom_model", ""),
+            value=st.session_state.get(KEY_SEARCH_PREF_CUSTOM_MODEL, ""),
             placeholder="e.g. BAAI/bge-small-en-v1.5",
             key="search_custom_model",
         ).strip()
-        st.session_state["_search_pref_custom_model"] = model_name
+        st.session_state[KEY_SEARCH_PREF_CUSTOM_MODEL] = model_name
         if not model_name:
             st.info(
                 "Enter a HuggingFace model ID above to use a custom embedding model."
@@ -187,7 +204,7 @@ if method == "Semantic":
             st.stop()
     else:
         model_name = _selected
-    st.session_state["_search_pref_model"] = model_name
+    st.session_state[KEY_SEARCH_PREF_MODEL] = model_name
 
 if not query or not query.strip():
     st.stop()
@@ -201,7 +218,7 @@ _model_key = model_name if method == "Semantic" else ""
 _corpus_hash = hash(tuple(texts))
 search_key = (q, method, _score_key, _model_key, _corpus_hash)
 
-if st.session_state.get("_search_hits_key") != search_key:
+if st.session_state.get(KEY_SEARCH_HITS_KEY) != search_key:
     # Parameters changed — run the search and cache results.
     if method == "Keyword":
         pattern = re.compile(re.escape(q), re.IGNORECASE)
@@ -247,36 +264,27 @@ if st.session_state.get("_search_hits_key") != search_key:
             )
             st.stop()
 
-    st.session_state["_search_hits"] = hits
-    st.session_state["_search_hits_key"] = search_key
-    st.session_state["_search_page"] = 0
+    st.session_state[KEY_SEARCH_HITS] = hits
+    st.session_state[KEY_SEARCH_HITS_KEY] = search_key
 else:
-    hits = st.session_state["_search_hits"]
+    hits = st.session_state[KEY_SEARCH_HITS]
 
 if not hits:
     st.info("No matches found.")
     st.stop()
 
 total_hits = len(hits)
-total_pages = max(1, -(-total_hits // per_page))  # ceiling division
 
-page = st.session_state.get("_search_page", 0)
-page = max(0, min(page, total_pages - 1))
-
-page_hits = hits[page * per_page : (page + 1) * per_page]
-
-col_count, col_prev, col_page, col_next = st.columns([4, 1, 2, 1])
-col_count.caption(f"{total_hits} result{'s' if total_hits != 1 else ''}")
-if total_pages > 1:
-    if col_prev.button("← Prev", disabled=page == 0, key="search_prev"):
-        st.session_state["_search_page"] = page - 1
-        st.rerun()
-    col_page.caption(
-        f"Page {page + 1} of {total_pages}",
-    )
-    if col_next.button("Next →", disabled=page >= total_pages - 1, key="search_next"):
-        st.session_state["_search_page"] = page + 1
-        st.rerun()
+# For term/regex methods, compile pattern for highlighting (needed on every rerun, including cached pagination)
+if method == "Keyword":
+    pattern = re.compile(re.escape(q), re.IGNORECASE)
+elif method == "Regex":
+    try:
+        pattern = re.compile(q, re.IGNORECASE)
+    except re.error:
+        pattern = re.compile(re.escape(q), re.IGNORECASE)
+else:
+    pattern = None
 
 # Assign a color to each unique document name
 unique_docs = list(dict.fromkeys(doc_names))
@@ -284,33 +292,66 @@ doc_color = {
     name: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, name in enumerate(unique_docs)
 }
 
-# Results
-for idx, score in page_hits:
-    doc_name = doc_names[idx]
-    passage = texts[idx]
-    color = doc_color[doc_name]
+col_count, col_view = st.columns([5, 2])
+col_count.caption(f"{total_hits} result{'s' if total_hits != 1 else ''}")
+show_table = col_view.checkbox(
+    "Show as table",
+    value=st.session_state.get(KEY_SEARCH_VIEW, False),
+    key="search_view_toggle",
+)
+st.session_state[KEY_SEARCH_VIEW] = show_table
 
-    if method == "Keyword":
-        display = highlight_term(passage, q, color)
-        score_str = ""
-    elif method == "Regex":
-        display = highlight_regex(passage, pattern, color)
-        score_str = ""
-    elif method == "Relevance":
-        display = highlight_query_tokens(passage, q, color)
-        score_str = f"{score:.2f}"
-    else:  # Semantic
-        display = highlight_query_tokens(passage, q, color)
-        score_str = f"{score:.2f}"
+if show_table:
+    import pandas as pd
 
-    with st.container(border=True):
-        col_doc, col_score = st.columns([5, 1])
-        with col_doc:
-            st.markdown(
-                f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{html.escape(doc_name)}</span>',
-                unsafe_allow_html=True,
-            )
-        with col_score:
-            if score_str:
-                st.caption(score_str)
-        st.markdown(display, unsafe_allow_html=True)
+    rows = []
+    for hit_idx, score in hits:
+        rows.append({
+            "Document": doc_names[hit_idx],
+            "#": para_indices[hit_idx],
+            "Passage": texts[hit_idx],
+            **({} if method in ("Keyword", "Regex") else {"Score": round(score, 3)}),
+        })
+    df = pd.DataFrame(rows)
+    st.dataframe(
+        df,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Passage": st.column_config.TextColumn(width="large"),
+            "#": st.column_config.NumberColumn(width="small"),
+            **({} if "Score" not in df.columns else {"Score": st.column_config.NumberColumn(width="small", format="%.3f")}),
+        },
+    )
+else:
+    for idx, score in hits:
+        doc_name = doc_names[idx]
+        para_idx = para_indices[idx]
+        passage = texts[idx]
+        color = doc_color[doc_name]
+
+        if method == "Keyword":
+            display = highlight_term(passage, q, color)
+            score_str = ""
+        elif method == "Regex":
+            display = highlight_regex(passage, pattern, color)
+            score_str = ""
+        elif method == "Relevance":
+            display = highlight_query_tokens(passage, q, color)
+            score_str = f"{score:.2f}"
+        else:  # Semantic
+            display = highlight_query_tokens(passage, q, color)
+            score_str = f"{score:.2f}"
+
+        with st.container(border=True):
+            col_doc, col_score = st.columns([5, 1])
+            with col_doc:
+                st.markdown(
+                    f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{html.escape(doc_name)}</span>'
+                    f' <span style="font-size:0.8em;color:gray">#{para_idx}</span>',
+                    unsafe_allow_html=True,
+                )
+            with col_score:
+                if score_str:
+                    st.caption(score_str)
+            st.markdown(display, unsafe_allow_html=True)

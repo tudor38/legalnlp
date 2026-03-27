@@ -7,6 +7,15 @@ import pandas as pd
 import spacy
 import streamlit as st
 
+from src.app_state import (
+    KEY_DT_CACHE_KEY,
+    KEY_DT_DATES,
+    KEY_DT_DEFS,
+    KEY_DT_MONEY,
+    KEY_DT_NUMBERS,
+    KEY_DT_PARTIES,
+    KEY_DT_SPACY_MODEL,
+)
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_spacy_nlp
 from src.utils.page import require_document
@@ -183,7 +192,7 @@ with st.sidebar:
         "en_core_web_trf",
     ]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
-    _saved = st.session_state.get("_dt_spacy_model_pref")
+    _saved = st.session_state.get(KEY_DT_SPACY_MODEL)
     _index = _installed.index(_saved) if _saved in _installed else 0
     spacy_model = st.selectbox(
         "spaCy model",
@@ -191,7 +200,7 @@ with st.sidebar:
         index=_index,
         help="Larger models improve entity recognition quality. md/lg are a good balance; trf is most accurate but slower.",
     )
-    st.session_state["_dt_spacy_model_pref"] = spacy_model
+    st.session_state[KEY_DT_SPACY_MODEL] = spacy_model
 
 st.subheader("Document Terms")
 st.markdown(
@@ -201,7 +210,7 @@ st.markdown(
 # Recompute only when the document or model changes
 _cache_key = hashlib.md5(file_bytes).hexdigest() + "|" + spacy_model
 
-if st.session_state.get("_doc_terms_key") != _cache_key:
+if st.session_state.get(KEY_DT_CACHE_KEY) != _cache_key:
     defs_df = pd.DataFrame()
     dates_df = pd.DataFrame()
     parties_df = pd.DataFrame()
@@ -231,20 +240,20 @@ if st.session_state.get("_doc_terms_key") != _cache_key:
         st.stop()
     st.session_state.update(
         {
-            "_doc_terms_key": _cache_key,
-            "_doc_terms_defs": defs_df,
-            "_doc_terms_dates": dates_df,
-            "_doc_terms_parties": parties_df,
-            "_doc_terms_money": money_df,
-            "_doc_terms_numbers": numbers_df,
+            KEY_DT_CACHE_KEY: _cache_key,
+            KEY_DT_DEFS: defs_df,
+            KEY_DT_DATES: dates_df,
+            KEY_DT_PARTIES: parties_df,
+            KEY_DT_MONEY: money_df,
+            KEY_DT_NUMBERS: numbers_df,
         }
     )
 else:
-    defs_df = st.session_state["_doc_terms_defs"]
-    dates_df = st.session_state["_doc_terms_dates"]
-    parties_df = st.session_state["_doc_terms_parties"]
-    money_df = st.session_state["_doc_terms_money"]
-    numbers_df = st.session_state["_doc_terms_numbers"]
+    defs_df = st.session_state[KEY_DT_DEFS]
+    dates_df = st.session_state[KEY_DT_DATES]
+    parties_df = st.session_state[KEY_DT_PARTIES]
+    money_df = st.session_state[KEY_DT_MONEY]
+    numbers_df = st.session_state[KEY_DT_NUMBERS]
 
 tab_defs, tab_dates, tab_parties, tab_money, tab_numbers = st.tabs(
     ["Definitions", "Dates", "Parties & Entities", "Money", "Numbers"]

@@ -269,7 +269,6 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
             # Use all <w:t> for rendered text — this resolves nested edits
             # so the comparison against moveTo text is apples-to-apples
             text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
-            para_text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
 
             if move_id:
                 info = move_info.setdefault(move_id, {})
@@ -277,7 +276,7 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
                     {
                         "from_xml_idx": xml_idx,
                         "from_text": text,
-                        "from_para_text": para_text,
+                        "from_para_text": text,
                         "author": author,
                         "date": date,
                     }
@@ -288,7 +287,6 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
             move_id = anc.get(_tag(W, "id"))
 
             text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
-            para_text = text
 
             if move_id:
                 info = move_info.setdefault(move_id, {})
@@ -296,7 +294,7 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
                     {
                         "to_final_idx": final_idx,
                         "to_text": text,
-                        "to_para_text": para_text,
+                        "to_para_text": text,
                     }
                 )
             final_idx += 1

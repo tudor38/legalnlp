@@ -14,7 +14,32 @@ from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 from umap import UMAP
 
-from src.app_state import MODEL_MINILM, MODEL_MPNET
+from src.app_state import (
+    KEY_TOPIC_ACTIVE_METHOD,
+    KEY_TOPIC_ACTIVE_QUERY,
+    KEY_TOPIC_COUNTS,
+    KEY_TOPIC_DOCS,
+    KEY_TOPIC_EMBEDDINGS,
+    KEY_TOPIC_HAD_SCORE,
+    KEY_TOPIC_LABEL_LAYERS,
+    KEY_TOPIC_MAP_SIG,
+    KEY_TOPIC_MAP_TYPE_PREF,
+    KEY_TOPIC_PREF_ANALYSIS_UNIT,
+    KEY_TOPIC_PREF_CUSTOM_MODEL,
+    KEY_TOPIC_PREF_EMBEDDING_MODEL,
+    KEY_TOPIC_PREF_HIGHLEVEL,
+    KEY_TOPIC_PREF_LOWLEVEL,
+    KEY_TOPIC_PREF_MIDLEVEL,
+    KEY_TOPIC_PREF_MIN_CHARS,
+    KEY_TOPIC_REDUCED,
+    KEY_TOPIC_STATE_KEY,
+    MODEL_MINILM,
+    MODEL_MPNET,
+    WKEY_TOPIC_SEARCH_METHOD,
+    WKEY_TOPIC_SEARCH_QUERY,
+    WKEY_TOPIC_SORT_ASC,
+    WKEY_TOPIC_SORT_COL,
+)
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
@@ -197,7 +222,7 @@ st.sidebar.markdown("### Topic Extraction")
 analysis_unit = st.sidebar.segmented_control(
     "Analysis unit",
     options=["Paragraph", "Sentence"],
-    default=st.session_state.get("_topic_pref_analysis_unit", "Paragraph"),
+    default=st.session_state.get(KEY_TOPIC_PREF_ANALYSIS_UNIT, "Paragraph"),
     key="topic_analysis_unit",
     help=(
         "Paragraph is best for legal docs in most cases. It keeps context and yields "
@@ -205,20 +230,20 @@ analysis_unit = st.sidebar.segmented_control(
         "spotting but can be noisier."
     ),
 )
-st.session_state["_topic_pref_analysis_unit"] = analysis_unit
+st.session_state[KEY_TOPIC_PREF_ANALYSIS_UNIT] = analysis_unit
 
 min_chars = st.sidebar.slider(
     "Minimum text length",
     20,
     400,
-    st.session_state.get("_topic_pref_min_chars", 80),
+    st.session_state.get(KEY_TOPIC_PREF_MIN_CHARS, 80),
     5,
     key="topic_min_chars",
     help="Short text can be noisy. Increase this to focus on richer text.",
 )
-st.session_state["_topic_pref_min_chars"] = min_chars
+st.session_state[KEY_TOPIC_PREF_MIN_CHARS] = min_chars
 
-_saved_model = st.session_state.get("_topic_pref_embedding_model")
+_saved_model = st.session_state.get(KEY_TOPIC_PREF_EMBEDDING_MODEL)
 _selected_model = st.sidebar.selectbox(
     "Embedding model",
     options=_model_options + ["Custom…"],
@@ -229,11 +254,11 @@ _selected_model = st.sidebar.selectbox(
 if _selected_model == "Custom…":
     embedding_model_name = st.sidebar.text_input(
         "HuggingFace model ID",
-        value=st.session_state.get("_topic_pref_custom_model", ""),
+        value=st.session_state.get(KEY_TOPIC_PREF_CUSTOM_MODEL, ""),
         placeholder="e.g. BAAI/bge-small-en-v1.5",
         key="topic_custom_model",
     ).strip()
-    st.session_state["_topic_pref_custom_model"] = embedding_model_name
+    st.session_state[KEY_TOPIC_PREF_CUSTOM_MODEL] = embedding_model_name
     if not embedding_model_name:
         st.info(
             "Enter a HuggingFace model ID in the sidebar to use a custom embedding model."
@@ -241,7 +266,7 @@ if _selected_model == "Custom…":
         st.stop()
 else:
     embedding_model_name = _selected_model
-st.session_state["_topic_pref_embedding_model"] = embedding_model_name
+st.session_state[KEY_TOPIC_PREF_EMBEDDING_MODEL] = embedding_model_name
 
 if analysis_unit == "Sentence":
     docs = _paragraphs_to_sentences(doc_paragraphs.paragraphs, min_chars=min_chars)
@@ -268,28 +293,28 @@ if len(docs) > _PASSAGE_WARN:
 
 
 def _on_search_submit() -> None:
-    st.session_state["_topic_active_query"] = st.session_state.get(
-        "topic_search_query", ""
+    st.session_state[KEY_TOPIC_ACTIVE_QUERY] = st.session_state.get(
+        WKEY_TOPIC_SEARCH_QUERY, ""
     )
-    st.session_state["_topic_active_method"] = (
-        st.session_state.get("topic_search_method") or "Keyword"
+    st.session_state[KEY_TOPIC_ACTIVE_METHOD] = (
+        st.session_state.get(WKEY_TOPIC_SEARCH_METHOD) or "Keyword"
     )
 
 
 @st.fragment
 def _search_method_pills() -> None:
-    st.session_state.setdefault("topic_search_method", "Keyword")
+    st.session_state.setdefault(WKEY_TOPIC_SEARCH_METHOD, "Keyword")
     st.pills(
         "Search type",
         options=["Keyword", "Regex", "Relevance", "Semantic"],
-        key="topic_search_method",
+        key=WKEY_TOPIC_SEARCH_METHOD,
         label_visibility="collapsed",
         selection_mode="single",
     )
 
 
-active_query = st.session_state.get("_topic_active_query", "")
-active_method = st.session_state.get("_topic_active_method", "Keyword")
+active_query = st.session_state.get(KEY_TOPIC_ACTIVE_QUERY, "")
+active_method = st.session_state.get(KEY_TOPIC_ACTIVE_METHOD, "Keyword")
 
 if active_method in ("Relevance", "Semantic"):
     st.sidebar.markdown("### Search")
@@ -341,12 +366,12 @@ _highlevel_pos = st.sidebar.slider(
     1,
     100,
     st.session_state.get(
-        "_topic_pref_highlevel", _to_slider(highlevel_default, _highlevel_max)
+        KEY_TOPIC_PREF_HIGHLEVEL, _to_slider(highlevel_default, _highlevel_max)
     ),
     key="topic_highlevel",
     help="Move right for more high-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_highlevel"] = _highlevel_pos
+st.session_state[KEY_TOPIC_PREF_HIGHLEVEL] = _highlevel_pos
 highlevel_size = _from_slider(_highlevel_pos, _highlevel_max)
 
 _midlevel_pos = st.sidebar.slider(
@@ -354,12 +379,12 @@ _midlevel_pos = st.sidebar.slider(
     1,
     100,
     st.session_state.get(
-        "_topic_pref_midlevel", _to_slider(midlevel_default, _midlevel_max)
+        KEY_TOPIC_PREF_MIDLEVEL, _to_slider(midlevel_default, _midlevel_max)
     ),
     key="topic_midlevel",
     help="Move right for more mid-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_midlevel"] = _midlevel_pos
+st.session_state[KEY_TOPIC_PREF_MIDLEVEL] = _midlevel_pos
 midlevel_size = _from_slider(_midlevel_pos, _midlevel_max)
 
 _lowlevel_pos = st.sidebar.slider(
@@ -367,12 +392,12 @@ _lowlevel_pos = st.sidebar.slider(
     1,
     100,
     st.session_state.get(
-        "_topic_pref_lowlevel", _to_slider(lowlevel_default, _lowlevel_max)
+        KEY_TOPIC_PREF_LOWLEVEL, _to_slider(lowlevel_default, _lowlevel_max)
     ),
     key="topic_lowlevel",
     help="Move right for more low-level topics; move left for fewer, broader groupings.",
 )
-st.session_state["_topic_pref_lowlevel"] = _lowlevel_pos
+st.session_state[KEY_TOPIC_PREF_LOWLEVEL] = _lowlevel_pos
 lowlevel_size = _from_slider(_lowlevel_pos, _lowlevel_max)
 
 granularity_sizes = [highlevel_size, midlevel_size, lowlevel_size]
@@ -418,7 +443,7 @@ _topic_state_key = hashlib.md5(
     ).encode()
 ).hexdigest()
 
-if st.session_state.get("_topic_state_key") != _topic_state_key:
+if st.session_state.get(KEY_TOPIC_STATE_KEY) != _topic_state_key:
     try:
         with st.spinner("Embedding and modeling topics..."):
             docs_tuple = tuple(docs)
@@ -446,20 +471,20 @@ if st.session_state.get("_topic_state_key") != _topic_state_key:
 
     st.session_state.update(
         {
-            "_topic_state_key": _topic_state_key,
-            "_topic_docs": docs,
-            "_topic_embeddings": embeddings,
-            "_topic_reduced": reduced_embeddings,
-            "_topic_label_layers": label_layers,
-            "_topic_counts": topic_counts,
+            KEY_TOPIC_STATE_KEY: _topic_state_key,
+            KEY_TOPIC_DOCS: docs,
+            KEY_TOPIC_EMBEDDINGS: embeddings,
+            KEY_TOPIC_REDUCED: reduced_embeddings,
+            KEY_TOPIC_LABEL_LAYERS: label_layers,
+            KEY_TOPIC_COUNTS: topic_counts,
         }
     )
 else:
-    docs = st.session_state["_topic_docs"]
-    embeddings = st.session_state["_topic_embeddings"]
-    reduced_embeddings = st.session_state["_topic_reduced"]
-    label_layers = st.session_state["_topic_label_layers"]
-    topic_counts = st.session_state["_topic_counts"]
+    docs = st.session_state[KEY_TOPIC_DOCS]
+    embeddings = st.session_state[KEY_TOPIC_EMBEDDINGS]
+    reduced_embeddings = st.session_state[KEY_TOPIC_REDUCED]
+    label_layers = st.session_state[KEY_TOPIC_LABEL_LAYERS]
+    topic_counts = st.session_state[KEY_TOPIC_COUNTS]
 
 st.sidebar.markdown("### Topics Found")
 sidebar_stats_cols = st.sidebar.columns(len(granularity_sizes))
@@ -524,8 +549,8 @@ def _show_map(
         return
 
     _map_options = ["Interactive", "Static"]
-    st.session_state.setdefault("_topic_map_type_pref", "Interactive")
-    _map_index = _map_options.index(st.session_state["_topic_map_type_pref"])
+    st.session_state.setdefault(KEY_TOPIC_MAP_TYPE_PREF, "Interactive")
+    _map_index = _map_options.index(st.session_state[KEY_TOPIC_MAP_TYPE_PREF])
     map_type = st.radio(
         "Map type",
         _map_options,
@@ -533,7 +558,7 @@ def _show_map(
         horizontal=True,
         label_visibility="collapsed",
     )
-    st.session_state["_topic_map_type_pref"] = map_type
+    st.session_state[KEY_TOPIC_MAP_TYPE_PREF] = map_type
 
     if map_type == "Static":
         with st.spinner("Building static map…"):
@@ -558,12 +583,12 @@ else:
     zoom = max(0.33, min(1.0, 15 / len(matched_indices)))
 
     _map_sig = (tuple(matched_indices), tuple(granularity_sizes), embedding_model_name)
-    if st.session_state.get("_topic_map_sig") != _map_sig:
+    if st.session_state.get(KEY_TOPIC_MAP_SIG) != _map_sig:
         _n_unique = len({lbl for lbl in plot_label_layers[-1] if lbl != "Noise"})
-        st.session_state["_topic_map_type_pref"] = (
+        st.session_state[KEY_TOPIC_MAP_TYPE_PREF] = (
             "Static" if _n_unique <= CFG.topic.static_map_threshold else "Interactive"
         )
-        st.session_state["_topic_map_sig"] = _map_sig
+        st.session_state[KEY_TOPIC_MAP_SIG] = _map_sig
         with st.spinner("Building map…"):
             html_content = _render_interactive_map(
                 plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
@@ -579,7 +604,7 @@ st.markdown("#### Search")
 st.text_input(
     "Filter text",
     label_visibility="collapsed",
-    key="topic_search_query",
+    key=WKEY_TOPIC_SEARCH_QUERY,
     placeholder="Search across all topics…",
     on_change=_on_search_submit,
 )
@@ -659,19 +684,19 @@ def _results_section(
         c for c in ["score", *topic_columns, "passage_idx"] if c in results_df.columns
     ]
     has_score = bool(score_map)
-    if has_score != st.session_state.get("_topic_had_score"):
-        st.session_state["_topic_had_score"] = has_score
-        st.session_state["topic_sort_col"] = "score" if has_score else "passage_idx"
-        st.session_state["topic_sort_asc"] = not has_score
+    if has_score != st.session_state.get(KEY_TOPIC_HAD_SCORE):
+        st.session_state[KEY_TOPIC_HAD_SCORE] = has_score
+        st.session_state[WKEY_TOPIC_SORT_COL] = "score" if has_score else "passage_idx"
+        st.session_state[WKEY_TOPIC_SORT_ASC] = not has_score
     scol1, scol2 = st.columns([3, 1])
     sort_by = scol1.selectbox(
         "Sort by",
         options=sortable_cols,
         index=0,
-        key="topic_sort_col",
+        key=WKEY_TOPIC_SORT_COL,
         label_visibility="collapsed",
     )
-    sort_asc = scol2.toggle("Ascending", value=False, key="topic_sort_asc")
+    sort_asc = scol2.toggle("Ascending", value=False, key=WKEY_TOPIC_SORT_ASC)
     results_df = results_df.sort_values(sort_by, ascending=sort_asc).reset_index(
         drop=True
     )
