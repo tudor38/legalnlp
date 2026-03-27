@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from typing import NamedTuple
 import streamlit as st
 from datetime import datetime, timedelta
@@ -548,8 +549,17 @@ else:
 file_bytes = get_file_bytes()
 
 if not file_bytes:
-    st.info("Upload a Word document using the sidebar to get started.")
-    st.stop()
+    _default = (
+        Path(__file__).parent.parent / "test_docs" / "services_agreement.docx"
+    )
+    if _default.exists():
+        _data = _default.read_bytes()
+        set_file_bytes(_data)
+        set_file_name(_default.name)
+        file_bytes = _data
+    else:
+        st.info("Upload a Word document using the sidebar to get started.")
+        st.stop()
 
 if file_bytes:
     try:
