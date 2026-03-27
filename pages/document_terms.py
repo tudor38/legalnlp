@@ -189,7 +189,6 @@ with st.sidebar:
         "en_core_web_sm",
         "en_core_web_md",
         "en_core_web_lg",
-        "en_core_web_trf",
     ]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
     _default = next((m for m in ["en_core_web_lg", "en_core_web_md", "en_core_web_sm"] if m in _installed), _installed[0] if _installed else None)
