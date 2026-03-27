@@ -47,6 +47,7 @@ from src.app_state import (
     KEY_MOVE_VIEW,
     KEY_STATS_MAIN_TAB,
     get_file_bytes,
+    get_file_name,
     set_file_bytes,
     set_file_name,
 )
@@ -89,7 +90,7 @@ MOVE_VIEWS = MoveViews(*CFG.page_1_tabs.move_views)
 
 
 # ---------------------------------------------------------------------------
-# Session state — initialise permanent keys once
+# Session state — initialize permanent keys once
 # ---------------------------------------------------------------------------
 DEFAULTS: dict = {
     KEY_DOC_FINALIZED: False,
@@ -194,6 +195,7 @@ def _store_uploaded_file():
         st.cache_data.clear()
         set_file_bytes(f.read())
         set_file_name(f.name)
+        st.session_state.pop("_demo_banner_dismissed", None)
         for key, val in DEFAULTS.items():
             if key not in (KEY_DOC_BYTES, KEY_DOC_NAME):
                 st.session_state[key] = val
@@ -548,9 +550,11 @@ else:
 
 file_bytes = get_file_bytes()
 
+_DEFAULT_DOC_NAME = "services_agreement.docx"
+
 if not file_bytes:
     _default = (
-        Path(__file__).parent.parent / "test_docs" / "services_agreement.docx"
+        Path(__file__).parent.parent / "test_docs" / _DEFAULT_DOC_NAME
     )
     if _default.exists():
         _data = _default.read_bytes()
@@ -560,6 +564,23 @@ if not file_bytes:
     else:
         st.info("Upload a Word document using the sidebar to get started.")
         st.stop()
+
+if get_file_name() == _DEFAULT_DOC_NAME and not st.session_state.get(
+    "_demo_banner_dismissed"
+):
+    _col_msg, _col_btn = st.columns([10, 1])
+    with _col_msg:
+        st.info(
+            "**Demo document loaded** — this is a fictitious sample file for "
+            "demonstration purposes only. Upload your own Word document using the "
+            "sidebar to analyze it.",
+            icon="ℹ️",
+        )
+    with _col_btn:
+        st.write("")  # vertical alignment nudge
+        if st.button("✕", key="_dismiss_demo_banner", help="Dismiss"):
+            st.session_state["_demo_banner_dismissed"] = True
+            st.rerun()
 
 if file_bytes:
     try:
