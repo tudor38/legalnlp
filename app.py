@@ -33,7 +33,7 @@ def _diamond_icon() -> Image.Image:
     return img
 
 
-st.set_page_config(page_title="Legal NLP", page_icon=_diamond_icon(), layout="wide")
+st.set_page_config(page_title="Word NLP", page_icon=_diamond_icon(), layout="wide")
 st.logo("assets/logo.svg")
 
 doc_stats = st.Page(
