@@ -198,7 +198,7 @@ with st.sidebar:
         "spaCy model",
         options=_installed,
         index=_index,
-        help="Larger models improve entity recognition quality. md/lg are a good balance; trf is most accurate but slower.",
+        help="Larger models improve entity recognition quality. the **md/lg** are a good balance.\n\nThe **trf** model is most accurate but not included because Streamlit free hosting cannot handle the workload.",
     )
     st.session_state[KEY_DT_SPACY_MODEL] = spacy_model
 
