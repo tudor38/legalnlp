@@ -99,15 +99,15 @@ DEFAULTS: dict = {
     KEY_DOC_NAME: None,
     # comment timeline
     KEY_COMMENT_TL_EXPANDED: False,
-    KEY_COMMENT_TL_EXPAND_ALL: True,
+    KEY_COMMENT_TL_EXPAND_ALL: False,
     KEY_COMMENT_TL_FIELDS: [f.label for f in COMMENT_FIELDS],
     # redline timeline
     KEY_REDLINE_TL_EXPANDED: False,
-    KEY_REDLINE_TL_EXPAND_ALL: True,
+    KEY_REDLINE_TL_EXPAND_ALL: False,
     KEY_REDLINE_TL_FIELDS: [f.label for f in REDLINE_FIELDS],
     # move timeline
     KEY_MOVE_TL_EXPANDED: False,
-    KEY_MOVE_TL_EXPAND_ALL: True,
+    KEY_MOVE_TL_EXPAND_ALL: False,
     KEY_MOVE_TL_FIELDS: [f.label for f in MOVE_FIELDS],
     # filters
     KEY_FILTER_AUTHORS: [],

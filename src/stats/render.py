@@ -274,15 +274,16 @@ def render_timeline(
         key=expanded_view_key,
         on_change=on_expanded_view,
     )
-    expand_all = (
+    collapse = (
         col_expand.toggle(
-            "Expand all",
+            "Collapse",
             key=expand_all_key,
             on_change=on_expand_all,
         )
         if expanded_view
         else False
     )
+    expand_all = not collapse if expanded_view else False
 
     all_field_labels = [f.label for f in fields]
     show_fields = st.multiselect(
