@@ -15,6 +15,7 @@ from src.app_state import (
     KEY_DT_NUMBERS,
     KEY_DT_PARTIES,
     KEY_DT_SPACY_MODEL,
+    make_store,
 )
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_spacy_nlp
@@ -129,10 +130,6 @@ _NUMERIC_PATTERN = re.compile(
 _SECTION_REF = re.compile(
     r"^\d{1,4}\.\d|\d{1,3}-\d{3,}|^§|^\d+\([a-zA-Z]\)|^[Ss]ection\s",
 )
-_OBLIGATION = re.compile(
-    r"\b(shall|must|no later than|prior to|by|before|within|deadline|due|effective)\b",
-    re.IGNORECASE,
-)
 
 
 def _clean_amounts(amounts_df: pd.DataFrame) -> pd.DataFrame:
@@ -147,13 +144,9 @@ def _clean_dates(dates_df: pd.DataFrame) -> pd.DataFrame:
     return dates_df[mask].reset_index(drop=True)
 
 
-def _key_dates(dates_df: pd.DataFrame) -> pd.DataFrame:
-    mask = dates_df["Context"].apply(lambda c: bool(_OBLIGATION.search(c)))
-    return dates_df[mask].reset_index(drop=True)
-
-
-def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
-    lines: list[str] = []
+def _render_expanded(
+    df: pd.DataFrame, heading_col: str, expand_all: bool = True
+) -> None:
     for _, row in df.iterrows():
         term = str(row[heading_col])
         context = highlight_regex(
@@ -163,14 +156,52 @@ def _render_expanded(df: pd.DataFrame, heading_col: str) -> None:
                 re.IGNORECASE,
             ),
         )
-        lines.append(f"#### #{row['Para']} — {html.escape(term)}\n\n{context}")
-    st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
+        with st.expander(f"#{row['Para']} — {html.escape(term)}", expanded=expand_all):
+            st.markdown(context, unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False, max_entries=5)
 def _get_paragraphs(file_bytes: bytes) -> tuple[str, ...]:
     doc = extract_paragraphs(io.BytesIO(file_bytes))
     return tuple(p.strip() for p in doc.paragraphs if p and p.strip())
+
+
+# ---------------------------------------------------------------------------
+# Expanded-view state — persists across navigation via permanent keys
+# ---------------------------------------------------------------------------
+_DT_SECTIONS = ("defs", "dates", "parties", "money", "numbers")
+
+# Init permanent keys only. Widget keys are never written to manually —
+# value= seeds them on first render (navigation / first load) and Streamlit
+# manages them on subsequent same-page reruns via session state.
+for _s in _DT_SECTIONS:
+    st.session_state.setdefault(f"dt_{_s}_expanded", False)
+    st.session_state.setdefault(f"dt_{_s}_collapse", False)
+
+
+def _expanded_view_controls(section: str) -> tuple[bool, bool]:
+    """Render Show expanded view + Collapse toggles for a tab section.
+
+    Returns (expanded, collapse). value= seeds from the permanent key when the
+    widget key is absent; on_change keeps the permanent key up to date.
+    """
+    _col_v, _col_c = st.columns([1, 1])
+    expanded = _col_v.toggle(
+        "Show expanded view",
+        value=st.session_state.get(f"dt_{section}_expanded", False),
+        key=f"_dt_{section}_expanded",
+        on_change=make_store(f"dt_{section}_expanded"),
+    )
+    if expanded:
+        collapse = _col_c.toggle(
+            "Collapse",
+            value=st.session_state.get(f"dt_{section}_collapse", False),
+            key=f"_dt_{section}_collapse",
+            on_change=make_store(f"dt_{section}_collapse"),
+        )
+    else:
+        collapse = False
+    return expanded, collapse
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +222,22 @@ with st.sidebar:
         "en_core_web_lg",
     ]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
-    _default = next((m for m in ["en_core_web_lg", "en_core_web_md", "en_core_web_sm"] if m in _installed), _installed[0] if _installed else None)
+    _default = next(
+        (
+            m
+            for m in ["en_core_web_lg", "en_core_web_md", "en_core_web_sm"]
+            if m in _installed
+        ),
+        _installed[0] if _installed else None,
+    )
     _saved = st.session_state.get(KEY_DT_SPACY_MODEL, _default)
-    _index = _installed.index(_saved) if _saved in _installed else _installed.index(_default) if _default in _installed else 0
+    _index = (
+        _installed.index(_saved)
+        if _saved in _installed
+        else _installed.index(_default)
+        if _default in _installed
+        else 0
+    )
     spacy_model = st.selectbox(
         "spaCy model",
         options=_installed,
@@ -264,42 +308,40 @@ with tab_defs:
         st.info("No definitions found.")
     else:
         st.caption(f"{len(defs_df)} defined terms")
-        st.dataframe(
-            defs_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Para": st.column_config.NumberColumn("#", width="small"),
-                "Term": st.column_config.TextColumn("Term", width="medium"),
-                "Context": st.column_config.TextColumn("Context", width="large"),
-            },
-        )
-        if st.checkbox("Show expanded view", key="dt_defs_expanded"):
-            _render_expanded(defs_df, "Term")
+        _expanded, _collapse = _expanded_view_controls("defs")
+        if not _expanded:
+            st.dataframe(
+                defs_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Para": st.column_config.NumberColumn("#", width="small"),
+                    "Term": st.column_config.TextColumn("Term", width="medium"),
+                    "Context": st.column_config.TextColumn("Context", width="large"),
+                },
+            )
+        else:
+            _render_expanded(defs_df, "Term", expand_all=not _collapse)
 
 with tab_dates:
     if dates_df.empty:
         st.info("No dates found.")
     else:
-        show_key_only = st.toggle(
-            "Key dates only",
-            value=False,
-            help="Show only dates with obligation language (shall, must, by, no later than…)",
-        )
-        display_df = _key_dates(dates_df) if show_key_only else dates_df
-        st.caption(f"{len(display_df)} dates")
-        st.dataframe(
-            display_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Para": st.column_config.NumberColumn("#", width="small"),
-                "Value": st.column_config.TextColumn("Date", width="medium"),
-                "Context": st.column_config.TextColumn("Context", width="large"),
-            },
-        )
-        if st.checkbox("Show expanded view", key="dt_dates_expanded"):
-            _render_expanded(display_df, "Value")
+        st.caption(f"{len(dates_df)} dates")
+        _expanded, _collapse = _expanded_view_controls("dates")
+        if not _expanded:
+            st.dataframe(
+                dates_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Para": st.column_config.NumberColumn("#", width="small"),
+                    "Value": st.column_config.TextColumn("Date", width="medium"),
+                    "Context": st.column_config.TextColumn("Context", width="large"),
+                },
+            )
+        else:
+            _render_expanded(dates_df, "Value", expand_all=not _collapse)
 
 with tab_parties:
     if parties_df.empty:
@@ -318,7 +360,23 @@ with tab_parties:
         display_df = (
             parties_df[parties_df["Type"] == type_filter] if type_filter else parties_df
         )
-        dedup = st.toggle("Unique only", value=False, key="dt_parties_dedup")
+        _col_dedup, _col_v, _col_c = st.columns([1, 1, 1])
+        dedup = _col_dedup.toggle("Unique only", value=False, key="dt_parties_dedup")
+        _expanded = _col_v.toggle(
+            "Show expanded view",
+            key="_dt_parties_expanded",
+            disabled=dedup,
+            on_change=make_store("dt_parties_expanded"),
+        )
+        if _expanded and not dedup:
+            _collapse = _col_c.toggle(
+                "Collapse",
+                key="_dt_parties_collapse",
+                on_change=make_store("dt_parties_collapse"),
+            )
+        else:
+            _collapse = False
+
         if dedup:
             table_df = display_df.drop_duplicates(subset="Value")[
                 ["Value", "Type"]
@@ -333,7 +391,7 @@ with tab_parties:
                     "Type": st.column_config.TextColumn("Type", width="small"),
                 },
             )
-        else:
+        elif not _expanded:
             st.caption(f"{len(display_df)} entities")
             st.dataframe(
                 display_df,
@@ -346,41 +404,46 @@ with tab_parties:
                     "Context": st.column_config.TextColumn("Context", width="large"),
                 },
             )
-            if st.checkbox("Show expanded view", key="dt_parties_expanded"):
-                _render_expanded(display_df, "Value")
+        else:
+            st.caption(f"{len(display_df)} entities")
+            _render_expanded(display_df, "Value", expand_all=not _collapse)
 
 with tab_money:
     if money_df.empty:
         st.info("No monetary values found.")
     else:
         st.caption(f"{len(money_df)} monetary values")
-        st.dataframe(
-            money_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Para": st.column_config.NumberColumn("#", width="small"),
-                "Value": st.column_config.TextColumn("Amount", width="medium"),
-                "Context": st.column_config.TextColumn("Context", width="large"),
-            },
-        )
-        if st.checkbox("Show expanded view", key="dt_money_expanded"):
-            _render_expanded(money_df, "Value")
+        _expanded, _collapse = _expanded_view_controls("money")
+        if not _expanded:
+            st.dataframe(
+                money_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Para": st.column_config.NumberColumn("#", width="small"),
+                    "Value": st.column_config.TextColumn("Amount", width="medium"),
+                    "Context": st.column_config.TextColumn("Context", width="large"),
+                },
+            )
+        else:
+            _render_expanded(money_df, "Value", expand_all=not _collapse)
 
 with tab_numbers:
     if numbers_df.empty:
         st.info("No numbers found.")
     else:
         st.caption(f"{len(numbers_df)} numbers")
-        st.dataframe(
-            numbers_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Para": st.column_config.NumberColumn("#", width="small"),
-                "Value": st.column_config.TextColumn("Value", width="medium"),
-                "Context": st.column_config.TextColumn("Context", width="large"),
-            },
-        )
-        if st.checkbox("Show expanded view", key="dt_numbers_expanded"):
-            _render_expanded(numbers_df, "Value")
+        _expanded, _collapse = _expanded_view_controls("numbers")
+        if not _expanded:
+            st.dataframe(
+                numbers_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Para": st.column_config.NumberColumn("#", width="small"),
+                    "Value": st.column_config.TextColumn("Value", width="medium"),
+                    "Context": st.column_config.TextColumn("Context", width="large"),
+                },
+            )
+        else:
+            _render_expanded(numbers_df, "Value", expand_all=not _collapse)

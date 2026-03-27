@@ -42,7 +42,7 @@ class ChartConfig:
 
 
 @dataclass(frozen=True)
-class SearchConfig:
+class MultiDocSearchConfig:
     min_para_chars: int
     bm25_k1: float
     bm25_b: float
@@ -73,7 +73,7 @@ class Page1Tabs:
 class AppConfig:
     display: DisplayConfig
     chart: ChartConfig
-    search: SearchConfig
+    multi_doc_search: MultiDocSearchConfig
     topic: TopicConfig
     time_bin: TimeBinConfig
     page_1_tabs: Page1Tabs
@@ -133,11 +133,13 @@ def _parse(raw: dict) -> AppConfig:
             ),
         )
 
-        search_raw = _section(raw, "search")
-        search = SearchConfig(
-            min_para_chars=_field(search_raw, "min_para_chars", "search", int),
-            bm25_k1=_field(search_raw, "bm25_k1", "search", float),
-            bm25_b=_field(search_raw, "bm25_b", "search", float),
+        multi_doc_search_raw = _section(raw, "multi_doc_search")
+        multi_doc_search = MultiDocSearchConfig(
+            min_para_chars=_field(
+                multi_doc_search_raw, "min_para_chars", "multi_doc_search", int
+            ),
+            bm25_k1=_field(multi_doc_search_raw, "bm25_k1", "multi_doc_search", float),
+            bm25_b=_field(multi_doc_search_raw, "bm25_b", "multi_doc_search", float),
         )
 
         topic_raw = _section(raw, "topic")
@@ -166,7 +168,7 @@ def _parse(raw: dict) -> AppConfig:
         return AppConfig(
             display=display,
             chart=chart,
-            search=search,
+            multi_doc_search=multi_doc_search,
             topic=topic,
             time_bin=time_bin,
             page_1_tabs=page_1_tabs,

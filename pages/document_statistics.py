@@ -50,6 +50,8 @@ from src.app_state import (
     get_file_name,
     set_file_bytes,
     set_file_name,
+    seed_widget,
+    make_store,
 )
 from src.stats.config import CFG
 
@@ -124,20 +126,6 @@ for key, val in DEFAULTS.items():
         st.session_state[key] = val
 
 
-# ---------------------------------------------------------------------------
-# Session state helpers
-# ---------------------------------------------------------------------------
-def _make_store(perm_key: str, default=None):
-    def callback():
-        st.session_state[perm_key] = st.session_state.get(f"_{perm_key}", default)
-
-    return callback
-
-
-def _seed(perm_key: str) -> None:
-    st.session_state[f"_{perm_key}"] = st.session_state[perm_key]
-
-
 _CB: dict[str, tuple[str, object]] = {
     "is_closed": (KEY_DOC_FINALIZED, False),
     "closed_date": (KEY_DOC_FINALIZED_DATE, None),
@@ -156,7 +144,7 @@ _CB: dict[str, tuple[str, object]] = {
     "redline_tab": (KEY_REDLINE_VIEW, REDLINE_VIEWS.counts),
     "move_tab": (KEY_MOVE_VIEW, MOVE_VIEWS.counts),
 }
-_stores = {name: _make_store(key, default) for name, (key, default) in _CB.items()}
+_stores = {name: make_store(key, default) for name, (key, default) in _CB.items()}
 
 _store_is_closed = _stores["is_closed"]
 _store_closed_date = _stores["closed_date"]
@@ -245,7 +233,7 @@ def _sidebar_controls(
     comments, redlines, all_dfs: list[pd.DataFrame]
 ) -> tuple[datetime, bool, tuple, list[str]]:
     st.sidebar.markdown("### Document")
-    _seed(KEY_DOC_FINALIZED)
+    seed_widget(KEY_DOC_FINALIZED)
     is_closed = st.sidebar.toggle(
         "Matter is closed",
         key="_doc_finalized",
@@ -338,7 +326,7 @@ def _render_comment_timeline(
         KEY_COMMENT_TL_EXPAND_ALL,
         KEY_COMMENT_TL_FIELDS,
     ):
-        _seed(key)
+        seed_widget(key)
     render_timeline(
         filtered_c_df,
         "Who commented? When?",
@@ -353,7 +341,7 @@ def _render_comment_timeline(
             "sentence",
             "paragraph",
         ],
-        default_fields=["Resolved", "Sentence", "Comment"],
+        default_fields=["Marked Resolved", "Sentence", "Comment"],
         all_authors=all_authors,
         expanded_view_key="_comment_tl_expanded",
         expand_all_key="_comment_tl_expand_all",
@@ -373,7 +361,7 @@ def _render_redline_timeline(
         KEY_REDLINE_TL_EXPAND_ALL,
         KEY_REDLINE_TL_FIELDS,
     ):
-        _seed(key)
+        seed_widget(key)
     render_timeline(
         filtered_r_df,
         "Who redlined? When?",
@@ -400,7 +388,7 @@ def _render_comments(
     render_date_caption(filtered_c_df, reference_date, is_closed)
     render_comment_metrics(comment_metrics(comments))
 
-    _seed(KEY_COMMENT_VIEW)
+    seed_widget(KEY_COMMENT_VIEW)
     comment_tab = st.pills(
         "View",
         list(COMMENT_VIEWS),
@@ -447,7 +435,7 @@ def _render_redlines(
         border=True,
     )
 
-    _seed(KEY_REDLINE_VIEW)
+    seed_widget(KEY_REDLINE_VIEW)
     redline_tab = st.pills(
         "View",
         list(REDLINE_VIEWS),
@@ -474,7 +462,7 @@ def _render_move_timeline(
     all_authors: list[str],
 ) -> None:
     for key in (KEY_MOVE_TL_EXPANDED, KEY_MOVE_TL_EXPAND_ALL, KEY_MOVE_TL_FIELDS):
-        _seed(key)
+        seed_widget(key)
     render_timeline(
         filtered_m_df,
         "Who moved text? When?",
@@ -507,7 +495,7 @@ def _render_moves(
     render_date_caption(filtered_m_df, reference_date, is_closed)
     st.metric("Total Moves", len(filtered_m_df), border=True)
 
-    _seed(KEY_MOVE_VIEW)
+    seed_widget(KEY_MOVE_VIEW)
     move_tab = st.pills(
         "View",
         list(MOVE_VIEWS),
@@ -553,9 +541,7 @@ file_bytes = get_file_bytes()
 _DEFAULT_DOC_NAME = "services_agreement.docx"
 
 if not file_bytes:
-    _default = (
-        Path(__file__).parent.parent / "test_docs" / _DEFAULT_DOC_NAME
-    )
+    _default = Path(__file__).parent.parent / "test_docs" / _DEFAULT_DOC_NAME
     if _default.exists():
         _data = _default.read_bytes()
         set_file_bytes(_data)
@@ -621,7 +607,7 @@ if file_bytes:
                 filtered_m_df["author"].isin(selected_authors)
             ].reset_index(drop=True)
 
-    _seed(KEY_STATS_MAIN_TAB)
+    seed_widget(KEY_STATS_MAIN_TAB)
     main_tab = st.pills(
         "Section",
         list(MAIN_TABS),

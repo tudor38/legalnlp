@@ -613,6 +613,12 @@ max_rows = st.sidebar.slider(
     "Max rows", min_value=10, max_value=500, value=100, step=10, key="topic_max_rows"
 )
 
+# Init permanent keys, then always seed widget keys from them (same pattern as document_terms).
+for _k in ("topic_show_expanded", "topic_collapse"):
+    st.session_state.setdefault(_k, False)
+st.session_state["_topic_show_expanded"] = st.session_state["topic_show_expanded"]
+st.session_state["_topic_collapse"] = st.session_state["topic_collapse"]
+
 
 @st.fragment
 def _results_section(
@@ -701,26 +707,38 @@ def _results_section(
     )
 
     st.caption(f"{len(results_df)} results")
-    st.dataframe(
-        results_df.head(max_rows),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "passage_idx": st.column_config.NumberColumn("#", width="small"),
-            "text": st.column_config.TextColumn("Passage", width="large"),
-            "score": st.column_config.NumberColumn(
-                "Score", format="%.4f", width="small"
+    _col_v, _col_c = st.columns([1, 1])
+    show_expanded = _col_v.toggle(
+        "Show expanded view",
+        key="_topic_show_expanded",
+        on_change=lambda: st.session_state.update(
+            {"topic_show_expanded": st.session_state.get("_topic_show_expanded", False)}
+        ),
+    )
+    if show_expanded:
+        _collapse = _col_c.toggle(
+            "Collapse",
+            key="_topic_collapse",
+            on_change=lambda: st.session_state.update(
+                {"topic_collapse": st.session_state.get("_topic_collapse", False)}
             ),
-        },
-    )
-
-    show_markdown = st.checkbox(
-        "Expand results",
-        key="topic_print_markdown",
-        value=False,
-    )
-
-    if not show_markdown:
+        )
+    else:
+        _collapse = False
+    expand_all = not _collapse if show_expanded else False
+    if not show_expanded:
+        st.dataframe(
+            results_df.head(max_rows),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "passage_idx": st.column_config.NumberColumn("#", width="small"),
+                "text": st.column_config.TextColumn("Passage", width="large"),
+                "score": st.column_config.NumberColumn(
+                    "Score", format="%.4f", width="small"
+                ),
+            },
+        )
         return
 
     shown_df = results_df.head(max_rows).copy()
@@ -731,7 +749,6 @@ def _results_section(
     topic_cols = [col for col in topic_columns if col in shown_df.columns]
     finest_labels = label_layers[-1]
     color_map = _topic_color_map(finest_labels)
-    lines: list[str] = []
     for _, row in shown_df.iterrows():
         passage_idx = int(row["passage_idx"])
         text = str(row["text"])
@@ -752,8 +769,8 @@ def _results_section(
         color = color_map.get(str(topic_label), "#ffe066")
         highlighted = highlight_topic_keywords(highlighted, str(topic_label), color)
         topics = " → ".join(f"{row[col]}" for col in topic_cols)
-        lines.append(f"#### #{passage_idx} — {topics}\n\n{highlighted}")
-    st.markdown("\n\n---\n\n".join(lines), unsafe_allow_html=True)
+        with st.expander(f"#{passage_idx} — {topics}", expanded=expand_all):
+            st.markdown(highlighted, unsafe_allow_html=True)
 
 
 _results_section(

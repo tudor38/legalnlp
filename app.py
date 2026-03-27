@@ -47,14 +47,16 @@ document_terms = st.Page(
 topic_explorer = st.Page(
     "pages/topic_explorer.py", title="Topic Explorer", icon=":material/explore:"
 )
-search = st.Page("pages/search.py", title="Search", icon=":material/search:")
+multi_doc_search = st.Page(
+    "pages/search.py", title="Multi-Doc Search", icon=":material/search:"
+)
 
 pg = st.navigation(
     [
         doc_stats,
         document_terms,
         topic_explorer,
-        search,
+        multi_doc_search,
     ]
 )
 pg.run()

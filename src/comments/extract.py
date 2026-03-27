@@ -106,21 +106,6 @@ class Comment:
     context: Optional[CommentContext] = None
 
 
-def _is_libreoffice(zip_names: list[str], names_bytes: dict[str, bytes]) -> bool:
-    """
-    LibreOffice doesn't write commentsIds.xml and uses little-endian hex
-    paraIds in commentsExtended.xml instead of real paragraph identifiers.
-    We detect it via the app.xml producer string.
-    """
-    if "docProps/app.xml" not in zip_names:
-        return False
-    root = ET.fromstring(names_bytes["docProps/app.xml"])
-    for elem in root.iter():
-        if elem.tag.endswith("Application") and elem.text:
-            return "libreoffice" in elem.text.lower()
-    return False
-
-
 # ---------------------------------------------------------------------------
 # Parsers — one per file, version-agnostic internally
 # ---------------------------------------------------------------------------
@@ -329,24 +314,12 @@ def _build_tree(comments: dict[str, Comment]) -> list[Comment]:
 
 
 # ---------------------------------------------------------------------------
-# Debug helper
-# ---------------------------------------------------------------------------
-def _debug_dump(label: str, content: str, mode: str = "a") -> None:
-    with open("/tmp/extract_comments_debug.log", mode) as f:
-        f.write(f"\n{'=' * 60}\n{label}\n{'=' * 60}\n")
-        f.write(content)
-        f.write("\n")
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 type DocxSource = str | Path | io.IOBase
 
 
-def extract_comments(
-    docx: DocxSource, debug: bool = False
-) -> tuple[list[Comment], WordVersion]:
+def extract_comments(docx: DocxSource) -> tuple[list[Comment], WordVersion]:
     """
     Extract all comments from a .docx file.
 
@@ -376,26 +349,11 @@ def extract_comments(
     except zipfile.BadZipFile as e:
         raise DocxParseError("Not a valid Word document (.docx).") from e
 
-    if debug:
-        _debug_dump("version", version.name, mode="w")
-        if comments_bytes:
-            _debug_dump(
-                "comments.xml (first 3000 chars)", comments_bytes.decode("utf-8")[:3000]
-            )
-        if extended_bytes:
-            _debug_dump(
-                "commentsExtended.xml",
-                ET.tostring(ET.fromstring(extended_bytes), encoding="unicode"),
-            )
-
     if not comments_bytes:
         return [], version
 
     try:
         comments, para_to_comment = _parse_comments(comments_bytes)
-
-        if debug:
-            _debug_dump("para_to_comment after _parse_comments", str(para_to_comment))
 
         if version == WordVersion.MODERN:
             para_to_owner = _parse_comments_ids(ids_bytes)
@@ -408,24 +366,6 @@ def extract_comments(
             if document_bytes:
                 para_to_comment.update(
                     _build_para_to_comment_from_document(document_bytes)
-                )
-            if debug:
-                _debug_dump(
-                    "para_to_comment after _build_para_to_comment_from_document",
-                    str(para_to_comment),
-                )
-                ext_root = ET.fromstring(extended_bytes)
-                _debug_dump(
-                    "commentsExtended paraId / paraIdParent pairs",
-                    str(
-                        [
-                            (
-                                ce.get(f"{{{W15}}}paraId"),
-                                ce.get(f"{{{W15}}}paraIdParent"),
-                            )
-                            for ce in ext_root.findall(_tag(W15, "commentEx"))
-                        ]
-                    ),
                 )
             _apply_extended(comments, para_to_comment, extended_bytes)
 
@@ -486,9 +426,8 @@ if __name__ == "__main__":
     import sys
 
     path = sys.argv[1] if len(sys.argv) > 1 else "document.docx"
-    debug = "--debug" in sys.argv
 
-    comments, version = extract_comments(path, debug=debug)
+    comments, version = extract_comments(path)
 
     print(f"Format detected : {version.name}")
     print(f"Comments found  : {len(comments)}\n")

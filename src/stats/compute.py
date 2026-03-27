@@ -37,7 +37,6 @@ class CommentMetrics:
     top_level: int
     replies: int
     resolved: int
-    open: int
 
 
 def comment_metrics(comments: list[Comment]) -> CommentMetrics:
@@ -52,21 +51,33 @@ def comment_metrics(comments: list[Comment]) -> CommentMetrics:
         top_level=top_level,
         replies=replies,
         resolved=resolved,
-        open=total - resolved,
     )
 
 
 # ---------------------------------------------------------------------------
 # Date helpers
 # ---------------------------------------------------------------------------
+def _parse_dt(obj, kind: str) -> datetime | None:
+    """Parse obj.date as ISO 8601, logging a warning and returning None on failure."""
+    try:
+        return datetime.fromisoformat(obj.date.rstrip("Z"))
+    except ValueError:
+        logger.warning(
+            "Skipping %s with unparseable date %r (id=%s)", kind, obj.date, obj.id
+        )
+        return None
+
+
 def latest_date(comments: list[Comment], redlines: list[Redline]) -> datetime | None:
     """Return the latest date across all comments and redlines."""
-    dates = []
-    for obj in [*comments, *redlines]:
-        try:
-            dates.append(datetime.fromisoformat(obj.date.rstrip("Z")))
-        except ValueError:
-            logger.warning("Skipping unparseable date %r", obj.date)
+    dates = [
+        dt
+        for obj, kind in [
+            *[(c, "comment") for c in comments],
+            *[(r, "redline") for r in redlines],
+        ]
+        if (dt := _parse_dt(obj, kind)) is not None
+    ]
     return max(dates) if dates else None
 
 
@@ -90,27 +101,22 @@ def comment_ages_df(
     rows = []
 
     def _add(c: Comment, kind: str) -> None:
-        try:
-            dt = datetime.fromisoformat(c.date.rstrip("Z"))
-            rows.append(
-                {
-                    "author": c.author,
-                    "age_days": (now - dt).days,
-                    "date": dt,
-                    "resolved": c.resolved,
-                    "kind": kind,
-                    "comment": c.text,
-                    "selected": c.context.selected_text if c.context else None,
-                    "sentence": [s.text for s in c.context.sentences]
-                    if c.context
-                    else [],
-                    "paragraph": c.context.paragraph_text if c.context else None,
-                }
-            )
-        except ValueError:
-            logger.warning(
-                "Skipping comment with unparseable date %r (id=%s)", c.date, c.id
-            )
+        dt = _parse_dt(c, kind)
+        if dt is None:
+            return
+        rows.append(
+            {
+                "author": c.author,
+                "age_days": (now - dt).days,
+                "date": dt,
+                "resolved": c.resolved,
+                "kind": kind,
+                "comment": c.text,
+                "selected": c.context.selected_text if c.context else None,
+                "sentence": [s.text for s in c.context.sentences] if c.context else [],
+                "paragraph": c.context.paragraph_text if c.context else None,
+            }
+        )
 
     for c in comments:
         _add(c, "comment")
@@ -127,25 +133,20 @@ def redline_ages_df(
     now = reference_date or datetime.now()
     rows = []
     for r in redlines:
-        try:
-            dt = datetime.fromisoformat(r.date.rstrip("Z"))
-            rows.append(
-                {
-                    "author": r.author,
-                    "age_days": (now - dt).days,
-                    "date": dt,
-                    "kind": r.kind,
-                    "text": r.text,
-                    "sentence": [s.text for s in r.context.sentences]
-                    if r.context
-                    else [],
-                    "paragraph": r.context.paragraph_text if r.context else None,
-                }
-            )
-        except ValueError:
-            logger.warning(
-                "Skipping redline with unparseable date %r (id=%s)", r.date, r.id
-            )
+        dt = _parse_dt(r, "redline")
+        if dt is None:
+            continue
+        rows.append(
+            {
+                "author": r.author,
+                "age_days": (now - dt).days,
+                "date": dt,
+                "kind": r.kind,
+                "text": r.text,
+                "sentence": [s.text for s in r.context.sentences] if r.context else [],
+                "paragraph": r.context.paragraph_text if r.context else None,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -156,21 +157,18 @@ def move_ages_df(
     now = reference_date or datetime.now()
     rows = []
     for m in moves:
-        try:
-            dt = datetime.fromisoformat(m.date.rstrip("Z"))
-            rows.append(
-                {
-                    "author": m.author,
-                    "age_days": (now - dt).days,
-                    "date": dt,
-                    "text": m.text,
-                    "from_para_idx": m.from_para_idx,
-                    "to_para_idx": m.to_para_idx,
-                    "distance": abs(m.to_para_idx - m.from_para_idx),
-                }
-            )
-        except ValueError:
-            logger.warning(
-                "Skipping move with unparseable date %r (id=%s)", m.date, m.id
-            )
+        dt = _parse_dt(m, "move")
+        if dt is None:
+            continue
+        rows.append(
+            {
+                "author": m.author,
+                "age_days": (now - dt).days,
+                "date": dt,
+                "text": m.text,
+                "from_para_idx": m.from_para_idx,
+                "to_para_idx": m.to_para_idx,
+                "distance": abs(m.to_para_idx - m.from_para_idx),
+            }
+        )
     return pd.DataFrame(rows)

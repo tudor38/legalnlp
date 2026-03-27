@@ -110,8 +110,8 @@ def tokenize(text: str) -> list[str]:
 def bm25_scores(
     docs: Sequence[str],
     query: str,
-    k1: float = CFG.search.bm25_k1,
-    b: float = CFG.search.bm25_b,
+    k1: float = CFG.multi_doc_search.bm25_k1,
+    b: float = CFG.multi_doc_search.bm25_b,
 ) -> np.ndarray:
     query_terms = tokenize(query)
     if not query_terms:

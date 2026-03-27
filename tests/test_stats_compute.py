@@ -14,21 +14,18 @@ class TestCommentMetrics:
     def test_empty(self):
         m = comment_metrics([])
         assert m.total == 0
-        assert m.open == 0
         assert m.resolved == 0
 
-    def test_single_open(self):
+    def test_single_unresolved(self):
         m = comment_metrics([_comment("1", "2024-01-01")])
         assert m.total == 1
         assert m.top_level == 1
         assert m.replies == 0
-        assert m.open == 1
         assert m.resolved == 0
 
     def test_single_resolved(self):
         m = comment_metrics([_comment("1", "2024-01-01", resolved=True)])
         assert m.resolved == 1
-        assert m.open == 0
 
     def test_with_replies(self):
         reply = _comment("2", "2024-01-02")
@@ -43,7 +40,6 @@ class TestCommentMetrics:
         parent = _comment("1", "2024-01-01", replies=[reply])
         m = comment_metrics([parent])
         assert m.resolved == 1
-        assert m.open == 1
 
 
 class TestLatestDate:

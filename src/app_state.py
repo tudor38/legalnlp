@@ -26,8 +26,6 @@ Usage
 
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
 
 # ---------------------------------------------------------------------------
@@ -69,7 +67,7 @@ KEY_MOVE_TL_EXPAND_ALL = "move_tl_expand_all"
 KEY_MOVE_TL_FIELDS = "move_tl_fields"
 
 # ---------------------------------------------------------------------------
-# Search page keys
+# Multi-Doc Search page keys
 # ---------------------------------------------------------------------------
 
 KEY_SEARCH_STORED_FILES = "_search_stored_files"
@@ -131,7 +129,30 @@ KEY_DT_NUMBERS = "_doc_terms_numbers"
 # Sentence transformer models (used in search, topic explorer)
 MODEL_MINILM = "all-MiniLM-L6-v2"
 MODEL_MPNET = "all-mpnet-base-v2"
-SENTENCE_TRANSFORMER_MODELS = [MODEL_MINILM, MODEL_MPNET]
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Widget ↔ permanent session state helpers
+# ---------------------------------------------------------------------------
+
+
+def seed_widget(key: str) -> None:
+    """Copy permanent session state key → widget key (prefixed with _).
+
+    Call this before rendering a widget whose state must survive navigation.
+    The widget should use key=f"_{key}".
+    """
+    st.session_state[f"_{key}"] = st.session_state[key]
+
+
+def make_store(key: str, default=False):
+    """Return an on_change callback that writes the widget value back to the permanent key."""
+
+    def _cb():
+        st.session_state[key] = st.session_state.get(f"_{key}", default)
+
+    return _cb
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +174,3 @@ def get_file_name() -> str | None:
 
 def set_file_name(value: str | None) -> None:
     st.session_state[KEY_DOC_NAME] = value
-
-
-def get_date_range() -> tuple[date | None, date | None]:
-    return (
-        st.session_state.get(KEY_FILTER_DATE_MIN),
-        st.session_state.get(KEY_FILTER_DATE_MAX),
-    )

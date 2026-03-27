@@ -1,5 +1,5 @@
 """
-Search — query across multiple uploaded Word documents.
+Multi-Doc Search — query across multiple uploaded Word documents.
 
 Supports three search methods:
   Keyword  — exact substring match (case-insensitive)
@@ -52,7 +52,7 @@ def _extract(file_bytes: bytes) -> list[tuple[int, str]]:
     return [
         (i, p.strip())
         for i, p in enumerate(doc.paragraphs)
-        if len(p.strip()) >= CFG.search.min_para_chars
+        if len(p.strip()) >= CFG.multi_doc_search.min_para_chars
     ]
 
 
@@ -67,7 +67,7 @@ def _embed(texts: tuple[str, ...], model_name: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
-st.subheader("Search")
+st.subheader("Multi-Doc Search")
 
 global_bytes = get_file_bytes()
 global_name = get_file_name()

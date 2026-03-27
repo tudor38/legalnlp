@@ -63,7 +63,7 @@ class TimelineField(NamedTuple):
 
 # Pre-built field configs for comments and redlines
 COMMENT_FIELDS: list[TimelineField] = [
-    TimelineField("Resolved", "Resolved", None),
+    TimelineField("Marked Resolved", "Resolved", None),
     TimelineField("Comment", "Comment", None),
     TimelineField("Selected", "Selected", "Selected"),
     TimelineField("Sentence", "Sentence", "Selected"),
@@ -107,7 +107,7 @@ def render_date_caption(
 def render_comment_metrics(metrics: CommentMetrics, n_cols: int = 2) -> None:
     items = [
         ("Total", metrics.total, None),
-        ("Open", metrics.open, None),
+        ("Marked Resolved", metrics.resolved, None),
     ]
     cols = st.columns(n_cols)
     for col, (label, value, delta) in zip(cols, items):
@@ -333,7 +333,7 @@ def render_timeline(
                 if not val and val != 0:
                     continue
                 if col_name == "Resolved":
-                    st.markdown(f"**Resolved:** {'Yes' if val else 'No'}")
+                    st.markdown(f"**Marked Resolved:** {'Yes' if val else 'No'}")
                 elif hl_name and hl_name in display.columns:
                     hl_val = row[hl_name]
                     st.markdown(f"**{label}:**")
