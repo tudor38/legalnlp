@@ -26,29 +26,22 @@ W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 # XML fixture helpers
 # ---------------------------------------------------------------------------
 
+
 def _comments_xml(body: str) -> bytes:
-    return (
-        f'<w:comments xmlns:w="{W}" xmlns:w14="{W14}">'
-        f"{body}"
-        f"</w:comments>"
-    ).encode()
+    return (f'<w:comments xmlns:w="{W}" xmlns:w14="{W14}">{body}</w:comments>').encode()
 
 
 def _comment_el(cid: str, author: str, text: str, para_id: str = "") -> str:
     para_id_attr = f' w14:paraId="{para_id}"' if para_id else ""
     return (
         f'<w:comment w:id="{cid}" w:author="{author}" w:date="2024-01-01T00:00:00Z">'
-        f'<w:p{para_id_attr}><w:r><w:t>{text}</w:t></w:r></w:p>'
+        f"<w:p{para_id_attr}><w:r><w:t>{text}</w:t></w:r></w:p>"
         f"</w:comment>"
     )
 
 
 def _doc_xml(body: str) -> bytes:
-    return (
-        f'<w:document xmlns:w="{W}">'
-        f"<w:body>{body}</w:body>"
-        f"</w:document>"
-    ).encode()
+    return (f'<w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>').encode()
 
 
 def _para(text: str) -> str:
@@ -65,6 +58,7 @@ def _make_docx(document_xml: str) -> bytes:
 # ---------------------------------------------------------------------------
 # _parse_comments
 # ---------------------------------------------------------------------------
+
 
 class TestParseComments:
     def test_empty_returns_empty(self):
@@ -83,8 +77,7 @@ class TestParseComments:
 
     def test_multiple_comments(self):
         xml = _comments_xml(
-            _comment_el("1", "Alice", "First")
-            + _comment_el("2", "Bob", "Second")
+            _comment_el("1", "Alice", "First") + _comment_el("2", "Bob", "Second")
         )
         comments, _ = _parse_comments(xml)
         assert len(comments) == 2
@@ -114,6 +107,7 @@ class TestParseComments:
 # ---------------------------------------------------------------------------
 # _build_tree
 # ---------------------------------------------------------------------------
+
 
 class TestBuildTree:
     def _make(self, cid: str, parent_id: str | None = None) -> Comment:
@@ -156,6 +150,7 @@ class TestBuildTree:
 # _parse_document_context
 # ---------------------------------------------------------------------------
 
+
 class TestParseDocumentContext:
     def test_empty_document(self):
         ctx = _parse_document_context(_doc_xml(""))
@@ -168,7 +163,7 @@ class TestParseDocumentContext:
             '<w:commentRangeStart w:id="1"/>'
             "<w:r><w:t>selected</w:t></w:r>"
             '<w:commentRangeEnd w:id="1"/>'
-            '<w:r><w:t> after</w:t></w:r>'
+            "<w:r><w:t> after</w:t></w:r>"
             "</w:p>"
         )
         ctx = _parse_document_context(xml)
@@ -189,8 +184,7 @@ class TestParseDocumentContext:
 
     def test_para_idx_for_second_para(self):
         xml = _doc_xml(
-            _para("first paragraph")
-            + "<w:p>"
+            _para("first paragraph") + "<w:p>"
             '<w:commentRangeStart w:id="1"/>'
             "<w:r><w:t>anchored</w:t></w:r>"
             '<w:commentRangeEnd w:id="1"/>'
@@ -220,11 +214,10 @@ class TestParseDocumentContext:
 # extract_paragraphs
 # ---------------------------------------------------------------------------
 
+
 class TestExtractParagraphs:
     def test_empty_document(self):
-        docx = _make_docx(
-            f'<w:document xmlns:w="{W}"><w:body></w:body></w:document>'
-        )
+        docx = _make_docx(f'<w:document xmlns:w="{W}"><w:body></w:body></w:document>')
         result = extract_paragraphs(io.BytesIO(docx))
         assert isinstance(result, DocumentParagraphs)
         assert result.paragraphs == []
@@ -243,7 +236,7 @@ class TestExtractParagraphs:
     def test_movefrom_excluded_from_paragraphs(self):
         W_NS = f'xmlns:w="{W}"'
         docx = _make_docx(
-            f'<w:document {W_NS}><w:body>'
+            f"<w:document {W_NS}><w:body>"
             f'<w:moveFrom w:id="1" w:author="A" w:date="2024-01-01T00:00:00Z">'
             "<w:p><w:r><w:t>moved away</w:t></w:r></w:p>"
             "</w:moveFrom>"
@@ -257,7 +250,7 @@ class TestExtractParagraphs:
     def test_movefrom_in_moved_from_dict(self):
         W_NS = f'xmlns:w="{W}"'
         docx = _make_docx(
-            f'<w:document {W_NS}><w:body>'
+            f"<w:document {W_NS}><w:body>"
             f'<w:moveFrom w:id="1" w:author="A" w:date="2024-01-01T00:00:00Z">'
             "<w:p><w:r><w:t>moved away</w:t></w:r></w:p>"
             "</w:moveFrom>"

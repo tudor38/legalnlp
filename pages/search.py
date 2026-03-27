@@ -94,11 +94,11 @@ if uploaded:
             f"'{f.name}' ({f.size / (1024 * 1024):.1f} MB) exceeds the "
             f"{_MAX_UPLOAD_MB} MB limit and was skipped."
         )
-    st.session_state[KEY_SEARCH_STORED_FILES] = [
-        (f.name, f.getvalue()) for f in valid
-    ]
+    st.session_state[KEY_SEARCH_STORED_FILES] = [(f.name, f.getvalue()) for f in valid]
 
-stored_extra: list[tuple[str, bytes]] = st.session_state.get(KEY_SEARCH_STORED_FILES, [])
+stored_extra: list[tuple[str, bytes]] = st.session_state.get(
+    KEY_SEARCH_STORED_FILES, []
+)
 
 # Build corpus sources
 extra_files = [(f.name, f.getvalue()) for f in uploaded] if uploaded else stored_extra
@@ -306,12 +306,16 @@ if show_table:
 
     rows = []
     for hit_idx, score in hits:
-        rows.append({
-            "Document": doc_names[hit_idx],
-            "#": para_indices[hit_idx],
-            "Passage": texts[hit_idx],
-            **({} if method in ("Keyword", "Regex") else {"Score": round(score, 3)}),
-        })
+        rows.append(
+            {
+                "Document": doc_names[hit_idx],
+                "#": para_indices[hit_idx],
+                "Passage": texts[hit_idx],
+                **(
+                    {} if method in ("Keyword", "Regex") else {"Score": round(score, 3)}
+                ),
+            }
+        )
     df = pd.DataFrame(rows)
     st.dataframe(
         df,
@@ -320,7 +324,13 @@ if show_table:
         column_config={
             "Passage": st.column_config.TextColumn(width="large"),
             "#": st.column_config.NumberColumn(width="small"),
-            **({} if "Score" not in df.columns else {"Score": st.column_config.NumberColumn(width="small", format="%.3f")}),
+            **(
+                {}
+                if "Score" not in df.columns
+                else {
+                    "Score": st.column_config.NumberColumn(width="small", format="%.3f")
+                }
+            ),
         },
     )
 else:

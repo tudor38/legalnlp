@@ -747,7 +747,9 @@ def _results_section(
                 highlighted = highlight_term(text, "")
         else:
             highlighted = highlight_term(text, search_query)
-        topic_label = finest_labels[passage_idx] if passage_idx < len(finest_labels) else ""
+        topic_label = (
+            finest_labels[passage_idx] if passage_idx < len(finest_labels) else ""
+        )
         color = color_map.get(str(topic_label), "#ffe066")
         highlighted = highlight_topic_keywords(highlighted, str(topic_label), color)
         topics = " → ".join(f"{row[col]}" for col in topic_cols)

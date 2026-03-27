@@ -15,11 +15,7 @@ W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def _xml(body: str) -> bytes:
-    return (
-        f'<w:document xmlns:w="{W}">'
-        f"<w:body>{body}</w:body>"
-        f"</w:document>"
-    ).encode()
+    return (f'<w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>').encode()
 
 
 def _p(*runs: str) -> str:
@@ -106,8 +102,7 @@ class TestParseRedlines:
     def test_para_idx_assigned(self):
         # Two paragraphs; insertion is in the second one.
         xml = _xml(
-            _p("first paragraph")
-            + f"<w:p>{_ins('1', 'Alice', 'inserted')}</w:p>"
+            _p("first paragraph") + f"<w:p>{_ins('1', 'Alice', 'inserted')}</w:p>"
         )
         redlines = _parse_redlines(xml)
         assert len(redlines) == 1
@@ -125,12 +120,7 @@ class TestParseRedlines:
         assert redlines[0].context.para_idx == 0
 
     def test_multiple_redlines_same_para(self):
-        xml = _xml(
-            f"<w:p>"
-            f"{_ins('1', 'Alice', 'foo')}"
-            f"{_del('2', 'Alice', 'bar')}"
-            f"</w:p>"
-        )
+        xml = _xml(f"<w:p>{_ins('1', 'Alice', 'foo')}{_del('2', 'Alice', 'bar')}</w:p>")
         redlines = _parse_redlines(xml)
         assert len(redlines) == 2
         kinds = {r.kind for r in redlines}
@@ -173,9 +163,7 @@ class TestParseMoves:
         # from_para_idx = 0 (first xml para)
         # to_para_idx   = 1 (second final-doc para; regular para is 0)
         xml = _xml(
-            _move_from("1", "Alice", "moved")
-            + _p("regular")
-            + _move_to("1", "moved")
+            _move_from("1", "Alice", "moved") + _p("regular") + _move_to("1", "moved")
         )
         moves = _parse_moves(xml)
         assert len(moves) == 1

@@ -38,7 +38,7 @@ class TestHighlightTerm:
         assert "&amp;" in result  # & must be escaped in output
 
     def test_xss_in_text_neutralised(self):
-        result = highlight_term('<script>alert(1)</script> hello', "hello")
+        result = highlight_term("<script>alert(1)</script> hello", "hello")
         assert "<script>" not in result
         assert "&lt;script&gt;" in result
 
@@ -48,7 +48,7 @@ class TestHighlightTerm:
 
     def test_color_applied_to_mark(self):
         result = highlight_term("hello world", "hello", color="#ff0")
-        assert 'background:#ff0' in result
+        assert "background:#ff0" in result
 
     def test_case_insensitive(self):
         result = highlight_term("Hello World", "hello")
@@ -60,7 +60,9 @@ class TestHighlightQueryTokens:
         assert highlight_query_tokens("Hello <World>", "") == "Hello &lt;World&gt;"
 
     def test_xss_in_text_neutralised(self):
-        result = highlight_query_tokens('<script>alert(1)</script> contract', "contract")
+        result = highlight_query_tokens(
+            "<script>alert(1)</script> contract", "contract"
+        )
         assert "<script>" not in result
 
     def test_match_wrapped_in_mark(self):

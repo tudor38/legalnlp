@@ -81,9 +81,13 @@ def render_paragraph_with_redline(para: str, text: str, kind: str) -> None:
     after = html.escape(para[idx + len(text) :])
     escaped = html.escape(text)
     if kind == "insertion":
-        styled = f'<span style="color:#3b82f6;text-decoration:underline">{escaped}</span>'
+        styled = (
+            f'<span style="color:#3b82f6;text-decoration:underline">{escaped}</span>'
+        )
     else:
-        styled = f'<span style="color:#ef4444;text-decoration:line-through">{escaped}</span>'
+        styled = (
+            f'<span style="color:#ef4444;text-decoration:line-through">{escaped}</span>'
+        )
     st.markdown(f"{before}{styled}{after}", unsafe_allow_html=True)
 
 
