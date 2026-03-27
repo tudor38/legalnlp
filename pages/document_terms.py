@@ -192,8 +192,9 @@ with st.sidebar:
         "en_core_web_trf",
     ]
     _installed = [m for m in _all_models if spacy.util.is_package(m)]
-    _saved = st.session_state.get(KEY_DT_SPACY_MODEL)
-    _index = _installed.index(_saved) if _saved in _installed else 0
+    _default = "en_core_web_md" if "en_core_web_md" in _installed else _installed[0] if _installed else None
+    _saved = st.session_state.get(KEY_DT_SPACY_MODEL, _default)
+    _index = _installed.index(_saved) if _saved in _installed else _installed.index(_default) if _default in _installed else 0
     spacy_model = st.selectbox(
         "spaCy model",
         options=_installed,

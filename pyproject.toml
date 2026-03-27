@@ -18,7 +18,9 @@ dependencies = [
     "streamlit>=1.55.0",
     "umap-learn>=0.5.9.post2",
     "pystemmer>=3.0.0",
-    "en-core-web-sm>=3.8.0",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "en-core-web-md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl",
+    "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl",
 ]
 
 [tool.pytest.ini_options]
@@ -33,5 +35,8 @@ build-backend = "hatchling.build"
 dev = [
     "pytest",
 ]
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/package"]
