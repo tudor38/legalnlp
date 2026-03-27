@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = [
     { name = "Tudor F. Capusan", email = "tudor38@gmail.com" }
 ]
-description = "Add your description here"
+description = "A Python package for legal natural language processing (NLP) tasks, including topic modeling, text visualization, and more."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
