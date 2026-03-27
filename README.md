@@ -1,6 +1,6 @@
 # WordNLP
 
-A Streamlit app for analysing Word documents (.docx). Comments, redlines, moves, topics, and search, all in one place. No data leaves your machine.
+A Streamlit app for analyzing Word documents (.docx). Comments, redlines, moves, topics, and search, all in one place. No data leaves your machine.
 
 ---
 
