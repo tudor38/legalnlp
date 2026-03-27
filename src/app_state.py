@@ -1,5 +1,5 @@
 """
-Typed session-state accessors for the legalnlp app.
+Typed session-state accessors for the wordnlp app.
 
 All session-state key strings live here as module-level constants.
 Cross-page keys (the ones read or written by more than one file) also get

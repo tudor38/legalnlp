@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate fictitious Word documents (.docx) for testing the legalnlp app.
+Generate fictitious Word documents (.docx) for testing the wordnlp app.
 
 Creates:
   test_docs/services_agreement.docx  — Software Development Services Agreement

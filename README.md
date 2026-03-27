@@ -47,8 +47,8 @@ Full-text search across one or more uploaded documents:
 ### Install and run with uv
 
 ```bash
-git clone https://github.com/your-org/legalnlp.git
-cd legalnlp
+git clone https://github.com/your-org/wordnlp.git
+cd wordnlp
 uv sync
 uv run streamlit run app.py
 ```
@@ -56,8 +56,8 @@ uv run streamlit run app.py
 ### Install and run with pip
 
 ```bash
-git clone https://github.com/your-org/legalnlp.git
-cd legalnlp
+git clone https://github.com/your-org/wordnlp.git
+cd wordnlp
 pip install -e .
 python -m spacy download en_core_web_sm
 streamlit run app.py
@@ -70,7 +70,7 @@ The app will open at `http://localhost:8501`.
 ## Project Structure
 
 ```
-legalnlp/
+wordnlp/
 ├── app.py                  # Entry point — registers all pages
 ├── pages/                  # One file per Streamlit page
 │   ├── document_statistics.py

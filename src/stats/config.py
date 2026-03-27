@@ -1,5 +1,5 @@
 """
-Config loader for the legalnlp app.
+Config loader for the wordnlp app.
 
 The TOML config lives at the project root: config/app.toml
 It is loaded once at import time and exposed as CFG (an AppConfig instance).

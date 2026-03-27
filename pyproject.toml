@@ -1,5 +1,5 @@
 [project]
-name = "legalnlp"
+name = "wordnlp"
 version = "0.1.0"
 authors = [
     { name = "Tudor F. Capusan", email = "tudor38@gmail.com" }
