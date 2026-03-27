@@ -1,13 +1,13 @@
 # LegalNLP
 
-A Streamlit app for analysing Word documents (.docx) from legal negotiations — comments, redlines, moves, topics, and search, all in one place. No data leaves your machine.
+A Streamlit app for analysing Word documents (.docx). Comments, redlines, moves, topics, and search, all in one place. No data leaves your machine.
 
 ---
 
 ## Features
 
 ### Document Statistics
-Upload a redlined Word document and get an overview of the negotiation:
+Upload a redlined Word document and get an overview of it:
 
 - **Comments** — count by author, timeline of when comments were made, expanded view with full comment text and highlighted selected text
 - **Redlines** — insertions and deletions by author and over time; insertion/deletion pairs by the same author are combined into a single "edit" view with red strikethrough and blue underline
