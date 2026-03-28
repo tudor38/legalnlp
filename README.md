@@ -26,7 +26,7 @@ Unsupervised topic modelling across the document's paragraphs or sentences using
 - Optional seed words to guide topic discovery
 - Configurable embedding model (built-in or any HuggingFace model ID)
 
-### Search
+### Multi-Doc Search
 Full-text search across one or more uploaded documents:
 
 - **Keyword** — exact substring match with highlighting
@@ -96,9 +96,9 @@ wordnlp/
 
 | Section | Key | Default | Description |
 |---|---|---|---|
-| `search` | `min_para_chars` | `30` | Minimum paragraph length included in search corpus |
-| `search` | `bm25_k1` | `1.5` | BM25 term frequency saturation |
-| `search` | `bm25_b` | `0.75` | BM25 length normalisation |
+| `multi_doc_search` | `min_para_chars` | `30` | Minimum paragraph length included in search corpus |
+| `multi_doc_search` | `bm25_k1` | `1.5` | BM25 term frequency saturation |
+| `multi_doc_search` | `bm25_b` | `0.75` | BM25 length normalisation |
 | `topic` | `min_passages` | `12` | Minimum passages required before topic modelling runs |
 | `topic` | `static_map_threshold` | `6` | Topic count at or below which the map defaults to static |
 | `topic` | `umap_min_dist` | `0.05` | UMAP min_dist — controls cluster tightness |
