@@ -42,13 +42,16 @@ _TL_HEIGHT_PER_AUTHOR = CFG.chart.timeline_height_per_author
 _TL_HEIGHT_BASE = CFG.chart.timeline_height_base
 
 
+def _author_colors(authors: list[str]) -> list[str]:
+    return [AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)] for i in range(len(authors))]
+
+
 def _author_color_scale_from(authors: list[str]) -> alt.Scale:
-    colors = [AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)] for i in range(len(authors))]
-    return alt.Scale(domain=authors, range=colors)
+    return alt.Scale(domain=authors, range=_author_colors(authors))
 
 
 def _author_color_map(authors: list[str]) -> dict[str, str]:
-    return {a: AUTHOR_PALETTE[i % len(AUTHOR_PALETTE)] for i, a in enumerate(authors)}
+    return dict(zip(authors, _author_colors(authors)))
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +418,7 @@ def render_timeline(
         if expanded_view
         else False
     )
-    expand_all = not collapse if expanded_view else False
+    expand_all = expanded_view and not collapse
 
     all_field_labels = [f.label for f in fields]
     show_fields = st.multiselect(

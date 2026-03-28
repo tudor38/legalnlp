@@ -93,6 +93,16 @@ def filter_by_date(df: pd.DataFrame, date_min: date, date_max: date) -> pd.DataF
 # ---------------------------------------------------------------------------
 # Age DataFrames
 # ---------------------------------------------------------------------------
+def _comment_context_fields(ctx) -> dict:
+    if ctx is None:
+        return {"selected": None, "sentence": [], "paragraph": None}
+    return {
+        "selected": ctx.selected_text,
+        "sentence": [s.text for s in ctx.sentences],
+        "paragraph": ctx.paragraph_text,
+    }
+
+
 def comment_ages_df(
     comments: list[Comment],
     reference_date: datetime | None = None,
@@ -100,10 +110,14 @@ def comment_ages_df(
     now = reference_date or datetime.now()
     rows = []
 
-    def _add(c: Comment, kind: str) -> None:
+    all_items = [(c, "comment") for c in comments] + [
+        (reply, "reply") for c in comments for reply in c.replies
+    ]
+
+    for c, kind in all_items:
         dt = _parse_dt(c, kind)
         if dt is None:
-            return
+            continue
         rows.append(
             {
                 "author": c.author,
@@ -112,18 +126,17 @@ def comment_ages_df(
                 "resolved": c.resolved,
                 "kind": kind,
                 "comment": c.text,
-                "selected": c.context.selected_text if c.context else None,
-                "sentence": [s.text for s in c.context.sentences] if c.context else [],
-                "paragraph": c.context.paragraph_text if c.context else None,
+                **_comment_context_fields(c.context),
             }
         )
 
-    for c in comments:
-        _add(c, "comment")
-        for reply in c.replies:
-            _add(reply, "reply")
-
     return pd.DataFrame(rows)
+
+
+def _redline_context_fields(ctx) -> dict:
+    if ctx is None:
+        return {"sentence": [], "paragraph": None}
+    return {"sentence": [s.text for s in ctx.sentences], "paragraph": ctx.paragraph_text}
 
 
 def redline_ages_df(
@@ -143,8 +156,7 @@ def redline_ages_df(
                 "date": dt,
                 "kind": r.kind,
                 "text": r.text,
-                "sentence": [s.text for s in r.context.sentences] if r.context else [],
-                "paragraph": r.context.paragraph_text if r.context else None,
+                **_redline_context_fields(r.context),
             }
         )
     return pd.DataFrame(rows)

@@ -271,8 +271,7 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
             text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
 
             if move_id:
-                info = move_info.setdefault(move_id, {})
-                info.update(
+                move_info.setdefault(move_id, {}).update(
                     {
                         "from_xml_idx": xml_idx,
                         "from_text": text,
@@ -289,8 +288,7 @@ def _parse_moves(xml_bytes: bytes) -> list[Move]:
             text = "".join(t.text or "" for t in para.iter(_tag(W, "t")))
 
             if move_id:
-                info = move_info.setdefault(move_id, {})
-                info.update(
+                move_info.setdefault(move_id, {}).update(
                     {
                         "to_final_idx": final_idx,
                         "to_text": text,

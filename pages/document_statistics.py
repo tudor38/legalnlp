@@ -58,6 +58,7 @@ from src.stats.config import CFG
 _ALLOWED_FILETYPES = CFG.display.allowed_filetypes
 _CLOSED_DATE_OFFSET = CFG.display.closed_date_offset_days
 _MAX_UPLOAD_MB = 25
+_BYTES_PER_MB = 1024 * 1024
 _KEY_UPLOAD_SIZE_ERROR = "_upload_size_error"
 
 
@@ -174,9 +175,9 @@ def _store_date_range():
 def _store_uploaded_file():
     f = st.session_state.get("_doc_upload")
     if f is not None:
-        if f.size > _MAX_UPLOAD_MB * 1024 * 1024:
+        if f.size > _MAX_UPLOAD_MB * _BYTES_PER_MB:
             st.session_state[_KEY_UPLOAD_SIZE_ERROR] = (
-                f"'{f.name}' is {f.size / (1024 * 1024):.1f} MB — "
+                f"'{f.name}' is {f.size / _BYTES_PER_MB:.1f} MB — "
                 f"maximum allowed size is {_MAX_UPLOAD_MB} MB."
             )
             return
@@ -206,8 +207,7 @@ def _store_uploaded_file():
             "_move_tl_expand_all",
             "_move_tl_fields",
         ):
-            if widget_key in st.session_state:
-                del st.session_state[widget_key]
+            st.session_state.pop(widget_key, None)
         f.seek(0)
     else:
         set_file_bytes(None)
@@ -593,19 +593,14 @@ if file_bytes:
     filtered_c_df = filter_by_date(c_df, date_range[0], date_range[1])
     filtered_r_df = filter_by_date(r_df, date_range[0], date_range[1])
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
-    if selected_authors:
-        if not filtered_c_df.empty:
-            filtered_c_df = filtered_c_df[
-                filtered_c_df["author"].isin(selected_authors)
-            ].reset_index(drop=True)
-        if not filtered_r_df.empty:
-            filtered_r_df = filtered_r_df[
-                filtered_r_df["author"].isin(selected_authors)
-            ].reset_index(drop=True)
-        if not filtered_m_df.empty:
-            filtered_m_df = filtered_m_df[
-                filtered_m_df["author"].isin(selected_authors)
-            ].reset_index(drop=True)
+    def _filter_authors(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not selected_authors:
+            return df
+        return df[df["author"].isin(selected_authors)].reset_index(drop=True)
+
+    filtered_c_df = _filter_authors(filtered_c_df)
+    filtered_r_df = _filter_authors(filtered_r_df)
+    filtered_m_df = _filter_authors(filtered_m_df)
 
     seed_widget(KEY_STATS_MAIN_TAB)
     main_tab = st.pills(
@@ -617,17 +612,10 @@ if file_bytes:
         label_visibility="collapsed",
     )
 
-    tab_renderers = {
-        MAIN_TABS.comments: lambda: _render_comments(
-            filtered_c_df, reference_date, is_closed, comments, all_authors
-        ),
-        MAIN_TABS.redlines: lambda: _render_redlines(
-            filtered_r_df, reference_date, is_closed, all_authors
-        ),
-        MAIN_TABS.moves: lambda: _render_moves(
-            filtered_m_df, reference_date, is_closed, all_authors
-        ),
-    }
-
-    if main_tab in tab_renderers:
-        tab_renderers[main_tab]()
+    match main_tab:
+        case MAIN_TABS.comments:
+            _render_comments(filtered_c_df, reference_date, is_closed, comments, all_authors)
+        case MAIN_TABS.redlines:
+            _render_redlines(filtered_r_df, reference_date, is_closed, all_authors)
+        case MAIN_TABS.moves:
+            _render_moves(filtered_m_df, reference_date, is_closed, all_authors)

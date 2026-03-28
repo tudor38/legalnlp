@@ -231,13 +231,12 @@ with st.sidebar:
         _installed[0] if _installed else None,
     )
     _saved = st.session_state.get(KEY_DT_SPACY_MODEL, _default)
-    _index = (
-        _installed.index(_saved)
-        if _saved in _installed
-        else _installed.index(_default)
-        if _default in _installed
-        else 0
-    )
+    if _saved in _installed:
+        _index = _installed.index(_saved)
+    elif _default in _installed:
+        _index = _installed.index(_default)
+    else:
+        _index = 0
     spacy_model = st.selectbox(
         "spaCy model",
         options=_installed,
@@ -303,45 +302,54 @@ tab_defs, tab_dates, tab_parties, tab_money, tab_numbers = st.tabs(
     ["Definitions", "Dates", "Parties & Entities", "Money", "Numbers"]
 )
 
-with tab_defs:
-    if defs_df.empty:
-        st.info("No definitions found.")
-    else:
-        st.caption(f"{len(defs_df)} defined terms")
-        _expanded, _collapse = _expanded_view_controls("defs")
-        if not _expanded:
-            st.dataframe(
-                defs_df,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Para": st.column_config.NumberColumn("#", width="small"),
-                    "Term": st.column_config.TextColumn("Term", width="medium"),
-                    "Context": st.column_config.TextColumn("Context", width="large"),
-                },
-            )
-        else:
-            _render_expanded(defs_df, "Term", expand_all=not _collapse)
+# The four standard tabs share the same render pattern.
+# Parties has extra controls (type filter, dedup) and is handled separately below.
+_STANDARD_TABS = [
+    (
+        tab_defs, defs_df, "defs", "No definitions found.", "defined terms", "Term",
+        {
+            "Para": st.column_config.NumberColumn("#", width="small"),
+            "Term": st.column_config.TextColumn("Term", width="medium"),
+            "Context": st.column_config.TextColumn("Context", width="large"),
+        },
+    ),
+    (
+        tab_dates, dates_df, "dates", "No dates found.", "dates", "Value",
+        {
+            "Para": st.column_config.NumberColumn("#", width="small"),
+            "Value": st.column_config.TextColumn("Date", width="medium"),
+            "Context": st.column_config.TextColumn("Context", width="large"),
+        },
+    ),
+    (
+        tab_money, money_df, "money", "No monetary values found.", "monetary values", "Value",
+        {
+            "Para": st.column_config.NumberColumn("#", width="small"),
+            "Value": st.column_config.TextColumn("Amount", width="medium"),
+            "Context": st.column_config.TextColumn("Context", width="large"),
+        },
+    ),
+    (
+        tab_numbers, numbers_df, "numbers", "No numbers found.", "numbers", "Value",
+        {
+            "Para": st.column_config.NumberColumn("#", width="small"),
+            "Value": st.column_config.TextColumn("Value", width="medium"),
+            "Context": st.column_config.TextColumn("Context", width="large"),
+        },
+    ),
+]
 
-with tab_dates:
-    if dates_df.empty:
-        st.info("No dates found.")
-    else:
-        st.caption(f"{len(dates_df)} dates")
-        _expanded, _collapse = _expanded_view_controls("dates")
-        if not _expanded:
-            st.dataframe(
-                dates_df,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Para": st.column_config.NumberColumn("#", width="small"),
-                    "Value": st.column_config.TextColumn("Date", width="medium"),
-                    "Context": st.column_config.TextColumn("Context", width="large"),
-                },
-            )
+for _tab, _df, _section, _empty_msg, _count_label, _heading_col, _col_config in _STANDARD_TABS:
+    with _tab:
+        if _df.empty:
+            st.info(_empty_msg)
         else:
-            _render_expanded(dates_df, "Value", expand_all=not _collapse)
+            st.caption(f"{len(_df)} {_count_label}")
+            _expanded, _collapse = _expanded_view_controls(_section)
+            if not _expanded:
+                st.dataframe(_df, width="stretch", hide_index=True, column_config=_col_config)
+            else:
+                _render_expanded(_df, _heading_col, expand_all=not _collapse)
 
 with tab_parties:
     if parties_df.empty:
@@ -407,43 +415,3 @@ with tab_parties:
         else:
             st.caption(f"{len(display_df)} entities")
             _render_expanded(display_df, "Value", expand_all=not _collapse)
-
-with tab_money:
-    if money_df.empty:
-        st.info("No monetary values found.")
-    else:
-        st.caption(f"{len(money_df)} monetary values")
-        _expanded, _collapse = _expanded_view_controls("money")
-        if not _expanded:
-            st.dataframe(
-                money_df,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Para": st.column_config.NumberColumn("#", width="small"),
-                    "Value": st.column_config.TextColumn("Amount", width="medium"),
-                    "Context": st.column_config.TextColumn("Context", width="large"),
-                },
-            )
-        else:
-            _render_expanded(money_df, "Value", expand_all=not _collapse)
-
-with tab_numbers:
-    if numbers_df.empty:
-        st.info("No numbers found.")
-    else:
-        st.caption(f"{len(numbers_df)} numbers")
-        _expanded, _collapse = _expanded_view_controls("numbers")
-        if not _expanded:
-            st.dataframe(
-                numbers_df,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Para": st.column_config.NumberColumn("#", width="small"),
-                    "Value": st.column_config.TextColumn("Value", width="medium"),
-                    "Context": st.column_config.TextColumn("Context", width="large"),
-                },
-            )
-        else:
-            _render_expanded(numbers_df, "Value", expand_all=not _collapse)

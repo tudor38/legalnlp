@@ -134,7 +134,7 @@ doc_names = [name for name, _, _ in corpus]
 para_indices = [para_idx for _, para_idx, _ in corpus]
 texts = [text for _, _, text in corpus]
 
-total_docs = len({n for n in doc_names})
+total_docs = len(set(doc_names))
 st.caption(
     f"{total_docs} document{'s' if total_docs != 1 else ''} · {len(texts)} passages"
 )
@@ -220,49 +220,47 @@ search_key = (q, method, _score_key, _model_key, _corpus_hash)
 
 if st.session_state.get(KEY_SEARCH_HITS_KEY) != search_key:
     # Parameters changed — run the search and cache results.
-    if method == "Keyword":
-        pattern = re.compile(re.escape(q), re.IGNORECASE)
-        hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
-
-    elif method == "Regex":
-        try:
-            pattern = re.compile(q, re.IGNORECASE)
-        except re.error as e:
-            st.warning(f"Invalid regex: {e}")
-            st.stop()
-        hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
-
-    elif method == "Relevance":
-        scores = bm25_scores(texts, q)
-        ranked = np.argsort(-scores)
-        all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
-        hits = [(i, s) for i, s in all_positive if s >= min_score]
-        if not hits and all_positive:
-            st.info(
-                f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
-            )
-            st.stop()
-
-    else:  # Semantic
-        try:
-            with st.spinner("Embedding…"):
-                corpus_embs = _embed(tuple(texts), model_name)
-                encoder = get_sentence_transformer(model_name)
-                q_emb = encoder.encode(
-                    [q], show_progress_bar=False, normalize_embeddings=True
-                )[0]
-        except RuntimeError as e:
-            st.error(str(e))
-            st.stop()
-        sims = corpus_embs @ q_emb
-        ranked = np.argsort(-sims)
-        all_ranked = [(int(i), float(sims[i])) for i in ranked]
-        hits = [(i, s) for i, s in all_ranked if s >= min_score]
-        if not hits and any(s > 0 for _, s in all_ranked):
-            st.info(
-                f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
-            )
-            st.stop()
+    match method:
+        case "Keyword":
+            pattern = re.compile(re.escape(q), re.IGNORECASE)
+            hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
+        case "Regex":
+            try:
+                pattern = re.compile(q, re.IGNORECASE)
+            except re.error as e:
+                st.warning(f"Invalid regex: {e}")
+                st.stop()
+            hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
+        case "Relevance":
+            scores = bm25_scores(texts, q)
+            ranked = np.argsort(-scores)
+            all_positive = [(int(i), float(scores[i])) for i in ranked if scores[i] > 0]
+            hits = [(i, s) for i, s in all_positive if s >= min_score]
+            if not hits and all_positive:
+                st.info(
+                    f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
+                )
+                st.stop()
+        case _:  # Semantic
+            try:
+                with st.spinner("Embedding…"):
+                    corpus_embs = _embed(tuple(texts), model_name)
+                    encoder = get_sentence_transformer(model_name)
+                    q_emb = encoder.encode(
+                        [q], show_progress_bar=False, normalize_embeddings=True
+                    )[0]
+            except RuntimeError as e:
+                st.error(str(e))
+                st.stop()
+            sims = corpus_embs @ q_emb
+            ranked = np.argsort(-sims)
+            all_ranked = [(int(i), float(sims[i])) for i in ranked]
+            hits = [(i, s) for i, s in all_ranked if s >= min_score]
+            if not hits and any(s > 0 for _, s in all_ranked):
+                st.info(
+                    f"No results above the minimum score ({min_score:.2f}). Try lowering it in the sidebar."
+                )
+                st.stop()
 
     st.session_state[KEY_SEARCH_HITS] = hits
     st.session_state[KEY_SEARCH_HITS_KEY] = search_key
@@ -276,15 +274,16 @@ if not hits:
 total_hits = len(hits)
 
 # For term/regex methods, compile pattern for highlighting (needed on every rerun, including cached pagination)
-if method == "Keyword":
-    pattern = re.compile(re.escape(q), re.IGNORECASE)
-elif method == "Regex":
-    try:
-        pattern = re.compile(q, re.IGNORECASE)
-    except re.error:
+match method:
+    case "Keyword":
         pattern = re.compile(re.escape(q), re.IGNORECASE)
-else:
-    pattern = None
+    case "Regex":
+        try:
+            pattern = re.compile(q, re.IGNORECASE)
+        except re.error:
+            pattern = re.compile(re.escape(q), re.IGNORECASE)
+    case _:
+        pattern = None
 
 # Assign a color to each unique document name
 unique_docs = list(dict.fromkeys(doc_names))
@@ -340,18 +339,16 @@ else:
         passage = texts[idx]
         color = doc_color[doc_name]
 
-        if method == "Keyword":
-            display = highlight_term(passage, q, color)
-            score_str = ""
-        elif method == "Regex":
-            display = highlight_regex(passage, pattern, color)
-            score_str = ""
-        elif method == "Relevance":
-            display = highlight_query_tokens(passage, q, color)
-            score_str = f"{score:.2f}"
-        else:  # Semantic
-            display = highlight_query_tokens(passage, q, color)
-            score_str = f"{score:.2f}"
+        match method:
+            case "Keyword":
+                display = highlight_term(passage, q, color)
+                score_str = ""
+            case "Regex":
+                display = highlight_regex(passage, pattern, color)
+                score_str = ""
+            case "Relevance" | "Semantic":
+                display = highlight_query_tokens(passage, q, color)
+                score_str = f"{score:.2f}"
 
         with st.container(border=True):
             col_doc, col_score = st.columns([5, 1])

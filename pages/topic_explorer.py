@@ -360,46 +360,22 @@ def _from_slider(pos: int, max_val: int) -> int:
 
 st.sidebar.markdown("### Topic Levels")
 
-_highlevel_pos = st.sidebar.slider(
-    "High-level",
-    1,
-    100,
-    st.session_state.get(
-        KEY_TOPIC_PREF_HIGHLEVEL, _to_slider(highlevel_default, _highlevel_max)
-    ),
-    key="topic_highlevel",
-    help="Move right for more high-level topics; move left for fewer, broader groupings.",
-)
-st.session_state[KEY_TOPIC_PREF_HIGHLEVEL] = _highlevel_pos
-highlevel_size = _from_slider(_highlevel_pos, _highlevel_max)
+_LEVEL_CFGS = [
+    ("High-level", KEY_TOPIC_PREF_HIGHLEVEL, "topic_highlevel", highlevel_default, _highlevel_max),
+    ("Mid-level",  KEY_TOPIC_PREF_MIDLEVEL,  "topic_midlevel",  midlevel_default,  _midlevel_max),
+    ("Low-level",  KEY_TOPIC_PREF_LOWLEVEL,  "topic_lowlevel",  lowlevel_default,  _lowlevel_max),
+]
 
-_midlevel_pos = st.sidebar.slider(
-    "Mid-level",
-    1,
-    100,
-    st.session_state.get(
-        KEY_TOPIC_PREF_MIDLEVEL, _to_slider(midlevel_default, _midlevel_max)
-    ),
-    key="topic_midlevel",
-    help="Move right for more mid-level topics; move left for fewer, broader groupings.",
-)
-st.session_state[KEY_TOPIC_PREF_MIDLEVEL] = _midlevel_pos
-midlevel_size = _from_slider(_midlevel_pos, _midlevel_max)
-
-_lowlevel_pos = st.sidebar.slider(
-    "Low-level",
-    1,
-    100,
-    st.session_state.get(
-        KEY_TOPIC_PREF_LOWLEVEL, _to_slider(lowlevel_default, _lowlevel_max)
-    ),
-    key="topic_lowlevel",
-    help="Move right for more low-level topics; move left for fewer, broader groupings.",
-)
-st.session_state[KEY_TOPIC_PREF_LOWLEVEL] = _lowlevel_pos
-lowlevel_size = _from_slider(_lowlevel_pos, _lowlevel_max)
-
-granularity_sizes = [highlevel_size, midlevel_size, lowlevel_size]
+granularity_sizes = []
+for _label, _pref_key, _wkey, _default, _max_val in _LEVEL_CFGS:
+    _pos = st.sidebar.slider(
+        _label, 1, 100,
+        st.session_state.get(_pref_key, _to_slider(_default, _max_val)),
+        key=_wkey,
+        help="Move right for more topics; move left for fewer, broader groupings.",
+    )
+    st.session_state[_pref_key] = _pos
+    granularity_sizes.append(_from_slider(_pos, _max_val))
 
 with st.sidebar.expander("Seed words (advanced)", expanded=False):
     st.caption(
@@ -487,9 +463,8 @@ else:
 
 st.sidebar.markdown("### Topics Found")
 sidebar_stats_cols = st.sidebar.columns(len(granularity_sizes))
-for idx, size in enumerate(granularity_sizes):
-    topic_name = "High-level" if idx == 0 else "Mid-level" if idx == 1 else "Low-level"
-    sidebar_stats_cols[idx].metric(topic_name, topic_counts[idx])
+for col, (name, *_), count in zip(sidebar_stats_cols, _LEVEL_CFGS, topic_counts):
+    col.metric(name, count)
 
 has_noise = any((labels == "Noise").any() for labels in label_layers)
 if has_noise:
@@ -501,35 +476,37 @@ if has_noise:
 score_map: dict[int, float] = {}
 if not normalized_query:
     matched_indices = list(range(len(docs)))
-elif active_method == "Keyword":
-    matched_indices = [
-        idx for idx, text in enumerate(docs) if normalized_query in text.lower()
-    ]
-elif active_method == "Regex":
-    try:
-        pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
-        matched_indices = [idx for idx, text in enumerate(docs) if pattern.search(text)]
-    except re.error as e:
-        st.warning(f"Invalid regex: {e}")
-        matched_indices = []
-elif active_method == "Relevance":
-    scores = bm25_scores(docs, normalized_query)
-    ranked = np.argsort(-scores)
-    matched_indices = [int(i) for i in ranked if scores[i] > 0][:rank_limit]
-    score_map = {int(i): float(scores[i]) for i in matched_indices}
 else:
-    encoder = get_sentence_transformer(embedding_model_name)
-    query_embedding = encoder.encode([normalized_query], show_progress_bar=False)[0]
-    doc_norms = np.linalg.norm(embeddings, axis=1)
-    query_norm = float(np.linalg.norm(query_embedding))
-    cosine_scores = (embeddings @ query_embedding) / np.clip(
-        doc_norms * query_norm, 1e-9, None
-    )
-    ranked = np.argsort(-cosine_scores)
-    matched_indices = [
-        int(i) for i in ranked if cosine_scores[i] >= semantic_min_score
-    ][:rank_limit]
-    score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
+    match active_method:
+        case "Keyword":
+            matched_indices = [
+                idx for idx, text in enumerate(docs) if normalized_query in text.lower()
+            ]
+        case "Regex":
+            try:
+                pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
+                matched_indices = [idx for idx, text in enumerate(docs) if pattern.search(text)]
+            except re.error as e:
+                st.warning(f"Invalid regex: {e}")
+                matched_indices = []
+        case "Relevance":
+            scores = bm25_scores(docs, normalized_query)
+            ranked = np.argsort(-scores)
+            matched_indices = [int(i) for i in ranked if scores[i] > 0][:rank_limit]
+            score_map = {int(i): float(scores[i]) for i in matched_indices}
+        case _:  # Semantic
+            encoder = get_sentence_transformer(embedding_model_name)
+            query_embedding = encoder.encode([normalized_query], show_progress_bar=False)[0]
+            doc_norms = np.linalg.norm(embeddings, axis=1)
+            query_norm = float(np.linalg.norm(query_embedding))
+            cosine_scores = (embeddings @ query_embedding) / np.clip(
+                doc_norms * query_norm, 1e-9, None
+            )
+            ranked = np.argsort(-cosine_scores)
+            matched_indices = [
+                int(i) for i in ranked if cosine_scores[i] >= semantic_min_score
+            ][:rank_limit]
+            score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
 
 
 def _show_map(
@@ -752,17 +729,18 @@ def _results_section(
     for _, row in shown_df.iterrows():
         passage_idx = int(row["passage_idx"])
         text = str(row["text"])
-        if search_method in ("Relevance", "Semantic"):
-            highlighted = highlight_query_tokens(text, search_query)
-        elif search_method == "Regex":
-            try:
-                highlighted = highlight_regex(
-                    text, re.compile(search_query.strip(), flags=re.IGNORECASE)
-                )
-            except re.error:
-                highlighted = highlight_term(text, "")
-        else:
-            highlighted = highlight_term(text, search_query)
+        match search_method:
+            case "Relevance" | "Semantic":
+                highlighted = highlight_query_tokens(text, search_query)
+            case "Regex":
+                try:
+                    highlighted = highlight_regex(
+                        text, re.compile(search_query.strip(), flags=re.IGNORECASE)
+                    )
+                except re.error:
+                    highlighted = highlight_term(text, "")
+            case _:
+                highlighted = highlight_term(text, search_query)
         topic_label = (
             finest_labels[passage_idx] if passage_idx < len(finest_labels) else ""
         )
