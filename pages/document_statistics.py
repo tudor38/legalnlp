@@ -593,6 +593,7 @@ if file_bytes:
     filtered_c_df = filter_by_date(c_df, date_range[0], date_range[1])
     filtered_r_df = filter_by_date(r_df, date_range[0], date_range[1])
     filtered_m_df = filter_by_date(m_df, date_range[0], date_range[1])
+
     def _filter_authors(df: pd.DataFrame) -> pd.DataFrame:
         if df.empty or not selected_authors:
             return df
@@ -614,7 +615,9 @@ if file_bytes:
 
     match main_tab:
         case MAIN_TABS.comments:
-            _render_comments(filtered_c_df, reference_date, is_closed, comments, all_authors)
+            _render_comments(
+                filtered_c_df, reference_date, is_closed, comments, all_authors
+            )
         case MAIN_TABS.redlines:
             _render_redlines(filtered_r_df, reference_date, is_closed, all_authors)
         case MAIN_TABS.moves:

@@ -180,7 +180,7 @@ for _s in _DT_SECTIONS:
 
 
 def _expanded_view_controls(section: str) -> tuple[bool, bool]:
-    """Render Show expanded view + Collapse toggles for a tab section.
+    """Render Show expanded view / Show table toggle + Collapse all toggle for a tab section.
 
     Returns (expanded, collapse). value= seeds from the permanent key when the
     widget key is absent; on_change keeps the permanent key up to date.
@@ -194,7 +194,7 @@ def _expanded_view_controls(section: str) -> tuple[bool, bool]:
     )
     if expanded:
         collapse = _col_c.toggle(
-            "Collapse",
+            "Collapse all",
             value=st.session_state.get(f"dt_{section}_collapse", False),
             key=f"_dt_{section}_collapse",
             on_change=make_store(f"dt_{section}_collapse"),
@@ -306,7 +306,12 @@ tab_defs, tab_dates, tab_parties, tab_money, tab_numbers = st.tabs(
 # Parties has extra controls (type filter, dedup) and is handled separately below.
 _STANDARD_TABS = [
     (
-        tab_defs, defs_df, "defs", "No definitions found.", "defined terms", "Term",
+        tab_defs,
+        defs_df,
+        "defs",
+        "No definitions found.",
+        "defined terms",
+        "Term",
         {
             "Para": st.column_config.NumberColumn("#", width="small"),
             "Term": st.column_config.TextColumn("Term", width="medium"),
@@ -314,7 +319,12 @@ _STANDARD_TABS = [
         },
     ),
     (
-        tab_dates, dates_df, "dates", "No dates found.", "dates", "Value",
+        tab_dates,
+        dates_df,
+        "dates",
+        "No dates found.",
+        "dates",
+        "Value",
         {
             "Para": st.column_config.NumberColumn("#", width="small"),
             "Value": st.column_config.TextColumn("Date", width="medium"),
@@ -322,7 +332,12 @@ _STANDARD_TABS = [
         },
     ),
     (
-        tab_money, money_df, "money", "No monetary values found.", "monetary values", "Value",
+        tab_money,
+        money_df,
+        "money",
+        "No monetary values found.",
+        "monetary values",
+        "Value",
         {
             "Para": st.column_config.NumberColumn("#", width="small"),
             "Value": st.column_config.TextColumn("Amount", width="medium"),
@@ -330,7 +345,12 @@ _STANDARD_TABS = [
         },
     ),
     (
-        tab_numbers, numbers_df, "numbers", "No numbers found.", "numbers", "Value",
+        tab_numbers,
+        numbers_df,
+        "numbers",
+        "No numbers found.",
+        "numbers",
+        "Value",
         {
             "Para": st.column_config.NumberColumn("#", width="small"),
             "Value": st.column_config.TextColumn("Value", width="medium"),
@@ -339,7 +359,15 @@ _STANDARD_TABS = [
     ),
 ]
 
-for _tab, _df, _section, _empty_msg, _count_label, _heading_col, _col_config in _STANDARD_TABS:
+for (
+    _tab,
+    _df,
+    _section,
+    _empty_msg,
+    _count_label,
+    _heading_col,
+    _col_config,
+) in _STANDARD_TABS:
     with _tab:
         if _df.empty:
             st.info(_empty_msg)
@@ -347,7 +375,9 @@ for _tab, _df, _section, _empty_msg, _count_label, _heading_col, _col_config in 
             st.caption(f"{len(_df)} {_count_label}")
             _expanded, _collapse = _expanded_view_controls(_section)
             if not _expanded:
-                st.dataframe(_df, width="stretch", hide_index=True, column_config=_col_config)
+                st.dataframe(
+                    _df, width="stretch", hide_index=True, column_config=_col_config
+                )
             else:
                 _render_expanded(_df, _heading_col, expand_all=not _collapse)
 
@@ -372,13 +402,15 @@ with tab_parties:
         dedup = _col_dedup.toggle("Unique only", value=False, key="dt_parties_dedup")
         _expanded = _col_v.toggle(
             "Show expanded view",
+            value=st.session_state.get("dt_parties_expanded", False),
             key="_dt_parties_expanded",
             disabled=dedup,
             on_change=make_store("dt_parties_expanded"),
         )
         if _expanded and not dedup:
             _collapse = _col_c.toggle(
-                "Collapse",
+                "Collapse all",
+                value=st.session_state.get("dt_parties_collapse", False),
                 key="_dt_parties_collapse",
                 on_change=make_store("dt_parties_collapse"),
             )

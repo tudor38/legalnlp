@@ -293,7 +293,7 @@ doc_color = {
 
 col_count, col_view = st.columns([5, 2])
 col_count.caption(f"{total_hits} result{'s' if total_hits != 1 else ''}")
-show_table = col_view.checkbox(
+show_table = col_view.toggle(
     "Show as table",
     value=st.session_state.get(KEY_SEARCH_VIEW, False),
     key="search_view_toggle",

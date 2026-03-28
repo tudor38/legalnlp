@@ -1,18 +1,10 @@
-import base64
 import hashlib
 import io
 import re
-from collections.abc import Sequence
 
-import datamapplot
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
-from bertopic import BERTopic
-from sklearn.feature_extraction.text import CountVectorizer
-from umap import UMAP
 
 from src.app_state import (
     KEY_TOPIC_ACTIVE_METHOD,
@@ -45,170 +37,24 @@ from src.utils.models import get_sentence_transformer
 from src.utils.page import require_document
 from src.stats.config import CFG
 from src.utils.text import (
-    TOPIC_PALETTE,
     bm25_scores,
     highlight_query_tokens,
     highlight_regex,
     highlight_term,
     highlight_topic_keywords,
 )
+from src.topics.model import (
+    clean_docs,
+    paragraphs_to_sentences,
+    topic_labels,
+    default_granularity,
+    topic_color_map,
+    embed_docs,
+    fit_topics,
+    reduce_to_2d,
+)
+from src.topics.render import render_interactive_map, show_map
 
-
-def _clean_docs(paragraphs: Sequence[str], min_chars: int) -> list[str]:
-    docs: list[str] = []
-    for paragraph in paragraphs:
-        text = (paragraph or "").strip()
-        if len(text) >= min_chars:
-            docs.append(text)
-    return docs
-
-
-def _paragraphs_to_sentences(paragraphs: Sequence[str], min_chars: int) -> list[str]:
-    sentences: list[str] = []
-    for paragraph in paragraphs:
-        text = (paragraph or "").strip()
-        if not text:
-            continue
-        parts = re.split(r"(?<=[.!?])\s+", text)
-        for part in parts:
-            sent = part.strip()
-            if len(sent) >= min_chars:
-                sentences.append(sent)
-    return sentences
-
-
-def _topic_labels(topic_model: BERTopic, topics: list[int]) -> np.ndarray:
-    labels: list[str] = []
-    for topic in topics:
-        if topic == -1:
-            labels.append("Noise")
-            continue
-        words = topic_model.get_topic(topic) or []
-        top_words = [word for word, _ in words[:3]]
-        if top_words:
-            labels.append(" ".join(top_words))
-        else:
-            labels.append(f"Topic {topic}")
-    return np.array(labels, dtype=object)
-
-
-@st.cache_resource(show_spinner=False, max_entries=3)
-def _embed_docs(docs: tuple[str, ...], embedding_model_name: str) -> np.ndarray:
-    encoder = get_sentence_transformer(embedding_model_name)
-    return encoder.encode(list(docs), show_progress_bar=False)
-
-
-@st.cache_resource(show_spinner=False, max_entries=9)
-def _fit_topics(
-    docs: tuple[str, ...],
-    embeddings: np.ndarray,
-    min_topic_size: int,
-    seed_topic_list: tuple[tuple[str, ...], ...] | None = None,
-) -> tuple[BERTopic, list[int]]:
-    model = BERTopic(
-        min_topic_size=min_topic_size,
-        vectorizer_model=CountVectorizer(stop_words="english"),
-        seed_topic_list=[list(group) for group in seed_topic_list]
-        if seed_topic_list
-        else None,
-        calculate_probabilities=False,
-        verbose=False,
-    )
-    topics, _ = model.fit_transform(list(docs), embeddings)
-    return model, topics
-
-
-@st.cache_resource(show_spinner=False, max_entries=3)
-def _reduce_to_2d(
-    embeddings: np.ndarray, n_neighbors: int, min_dist: float
-) -> np.ndarray:
-    reducer = UMAP(
-        n_neighbors=n_neighbors,
-        n_components=2,
-        min_dist=min_dist,
-        metric="cosine",
-        random_state=42,
-    )
-    return reducer.fit_transform(embeddings)
-
-
-@st.cache_data(show_spinner=False, max_entries=5)
-def _render_static_map(
-    plot_embeddings: np.ndarray,
-    plot_label_layers: tuple,
-) -> str:
-    """Return base64-encoded PNG."""
-    finest = plot_label_layers[-1]
-    fig, _ = datamapplot.create_plot(
-        plot_embeddings,
-        finest,
-        noise_label="Noise",
-        noise_color="#cccccc",
-        dynamic_label_size=False,
-        figsize=(22, 15),
-        label_wrap_width=20,
-        dpi=180,
-    )
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode()
-
-
-@st.cache_data(show_spinner=False, max_entries=5)
-def _render_interactive_map(
-    plot_embeddings: np.ndarray,
-    plot_label_layers: tuple,
-    all_docs: tuple[str, ...],
-    matched_indices: tuple[int, ...],
-    zoom: float,
-) -> str | None:
-    """Return HTML string, or None if datamapplot cannot render this dataset interactively.
-
-    datamapplot crashes when only one unique topic label exists: it produces a
-    1-D label_locations array ([x, y]) instead of 2-D ([[x, y], ...]), causing
-    an IndexError on label_locations[:, 0].  Guard against it up front.
-    """
-    finest = plot_label_layers[-1]
-    n_unique = len({lbl for lbl in finest if lbl != "Noise"})
-    if n_unique < 2:
-        return None
-
-    try:
-        plot_docs = [all_docs[i] for i in matched_indices]
-        plot = datamapplot.create_interactive_plot(
-            plot_embeddings,
-            *plot_label_layers,
-            hover_text=np.array(plot_docs, dtype=object),
-            enable_search=False,
-            noise_label="Noise",
-            noise_color="#cccccc",
-            initial_zoom_fraction=zoom,
-        )
-        return str(plot)
-    except (IndexError, ValueError):
-        return None
-
-
-def _default_granularity(n_docs: int) -> tuple[int, int, int]:
-    highlevel = max(4, n_docs // 4)
-    midlevel = max(3, n_docs // 10)
-    lowlevel = 2
-    # Enforce strictly decreasing so all three levels stay distinct after set deduplication
-    midlevel = min(midlevel, highlevel - 1)
-    if midlevel <= lowlevel:
-        midlevel = lowlevel + 1
-    if highlevel <= midlevel:
-        highlevel = midlevel + 1
-    return highlevel, midlevel, lowlevel
-
-
-def _topic_color_map(label_layer: np.ndarray) -> dict[str, str]:
-    unique = [l for l in dict.fromkeys(label_layer) if l != "Noise"]
-    return {
-        label: TOPIC_PALETTE[i % len(TOPIC_PALETTE)] for i, label in enumerate(unique)
-    }
 
 
 file_bytes = require_document()
@@ -268,9 +114,9 @@ else:
 st.session_state[KEY_TOPIC_PREF_EMBEDDING_MODEL] = embedding_model_name
 
 if analysis_unit == "Sentence":
-    docs = _paragraphs_to_sentences(doc_paragraphs.paragraphs, min_chars=min_chars)
+    docs = paragraphs_to_sentences(doc_paragraphs.paragraphs, min_chars=min_chars)
 else:
-    docs = _clean_docs(doc_paragraphs.paragraphs, min_chars=min_chars)
+    docs = clean_docs(doc_paragraphs.paragraphs, min_chars=min_chars)
 
 if len(docs) < CFG.topic.min_passages:
     st.warning(
@@ -338,7 +184,7 @@ if active_method == "Semantic":
     )
 
 normalized_query = active_query.strip().lower()
-highlevel_default, midlevel_default, lowlevel_default = _default_granularity(len(docs))
+highlevel_default, midlevel_default, lowlevel_default = default_granularity(len(docs))
 _highlevel_max = max(3, min(50, len(docs) // 4))
 _midlevel_max = max(3, min(30, len(docs) // 6))
 _lowlevel_max = max(3, min(15, len(docs) // 10))
@@ -361,15 +207,35 @@ def _from_slider(pos: int, max_val: int) -> int:
 st.sidebar.markdown("### Topic Levels")
 
 _LEVEL_CFGS = [
-    ("High-level", KEY_TOPIC_PREF_HIGHLEVEL, "topic_highlevel", highlevel_default, _highlevel_max),
-    ("Mid-level",  KEY_TOPIC_PREF_MIDLEVEL,  "topic_midlevel",  midlevel_default,  _midlevel_max),
-    ("Low-level",  KEY_TOPIC_PREF_LOWLEVEL,  "topic_lowlevel",  lowlevel_default,  _lowlevel_max),
+    (
+        "High-level",
+        KEY_TOPIC_PREF_HIGHLEVEL,
+        "topic_highlevel",
+        highlevel_default,
+        _highlevel_max,
+    ),
+    (
+        "Mid-level",
+        KEY_TOPIC_PREF_MIDLEVEL,
+        "topic_midlevel",
+        midlevel_default,
+        _midlevel_max,
+    ),
+    (
+        "Low-level",
+        KEY_TOPIC_PREF_LOWLEVEL,
+        "topic_lowlevel",
+        lowlevel_default,
+        _lowlevel_max,
+    ),
 ]
 
 granularity_sizes = []
 for _label, _pref_key, _wkey, _default, _max_val in _LEVEL_CFGS:
     _pos = st.sidebar.slider(
-        _label, 1, 100,
+        _label,
+        1,
+        100,
         st.session_state.get(_pref_key, _to_slider(_default, _max_val)),
         key=_wkey,
         help="Move right for more topics; move left for fewer, broader groupings.",
@@ -422,8 +288,8 @@ if st.session_state.get(KEY_TOPIC_STATE_KEY) != _topic_state_key:
     try:
         with st.spinner("Embedding and modeling topics..."):
             docs_tuple = tuple(docs)
-            embeddings = _embed_docs(docs_tuple, embedding_model_name)
-            reduced_embeddings = _reduce_to_2d(
+            embeddings = embed_docs(docs_tuple, embedding_model_name)
+            reduced_embeddings = reduce_to_2d(
                 embeddings=embeddings,
                 n_neighbors=min(30, max(5, len(docs) // 25)),
                 min_dist=CFG.topic.umap_min_dist,
@@ -432,10 +298,10 @@ if st.session_state.get(KEY_TOPIC_STATE_KEY) != _topic_state_key:
             label_layers: list[np.ndarray] = []
             topic_counts: list[int] = []
             for min_topic_size in granularity_sizes:
-                topic_model, topics = _fit_topics(
+                topic_model, topics = fit_topics(
                     docs_tuple, embeddings, min_topic_size, seed_topic_list
                 )
-                labels = _topic_labels(topic_model, topics)
+                labels = topic_labels(topic_model, topics)
                 label_layers.append(labels)
                 n_topics = len({t for t in topics if t != -1})
                 topic_counts.append(n_topics)
@@ -485,7 +351,9 @@ else:
         case "Regex":
             try:
                 pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
-                matched_indices = [idx for idx, text in enumerate(docs) if pattern.search(text)]
+                matched_indices = [
+                    idx for idx, text in enumerate(docs) if pattern.search(text)
+                ]
             except re.error as e:
                 st.warning(f"Invalid regex: {e}")
                 matched_indices = []
@@ -496,7 +364,9 @@ else:
             score_map = {int(i): float(scores[i]) for i in matched_indices}
         case _:  # Semantic
             encoder = get_sentence_transformer(embedding_model_name)
-            query_embedding = encoder.encode([normalized_query], show_progress_bar=False)[0]
+            query_embedding = encoder.encode(
+                [normalized_query], show_progress_bar=False
+            )[0]
             doc_norms = np.linalg.norm(embeddings, axis=1)
             query_norm = float(np.linalg.norm(query_embedding))
             cosine_scores = (embeddings @ query_embedding) / np.clip(
@@ -508,41 +378,6 @@ else:
             ][:rank_limit]
             score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
 
-
-def _show_map(
-    plot_embeddings: np.ndarray,
-    plot_label_layers: tuple,
-    zoom: float,
-    html_content: str | None,
-) -> None:
-    if html_content is None:
-        st.caption(
-            "Interactive map is not available for this dataset. Adjusting topic sliders could enable the option to view an interactive map."
-        )
-        with st.spinner("Building static map…"):
-            png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
-        st.image(base64.b64decode(png_b64), width="stretch")
-        return
-
-    _map_options = ["Interactive", "Static"]
-    st.session_state.setdefault(KEY_TOPIC_MAP_TYPE_PREF, "Interactive")
-    _map_index = _map_options.index(st.session_state[KEY_TOPIC_MAP_TYPE_PREF])
-    map_type = st.radio(
-        "Map type",
-        _map_options,
-        index=_map_index,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    st.session_state[KEY_TOPIC_MAP_TYPE_PREF] = map_type
-
-    if map_type == "Static":
-        with st.spinner("Building static map…"):
-            png_b64 = _render_static_map(plot_embeddings, plot_label_layers)
-        st.image(base64.b64decode(png_b64), width="stretch")
-        return
-
-    components.html(html_content, height=860, scrolling=False)
 
 
 st.subheader("Topic Explorer")
@@ -566,15 +401,15 @@ else:
         )
         st.session_state[KEY_TOPIC_MAP_SIG] = _map_sig
         with st.spinner("Building map…"):
-            html_content = _render_interactive_map(
+            html_content = render_interactive_map(
                 plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
             )
     else:
-        html_content = _render_interactive_map(
+        html_content = render_interactive_map(
             plot_embeddings, plot_label_layers, docs, tuple(matched_indices), zoom
         )
 
-    _show_map(plot_embeddings, plot_label_layers, zoom, html_content)
+    show_map(plot_embeddings, plot_label_layers, zoom, html_content)
 
 st.markdown("#### Search")
 st.text_input(
@@ -725,7 +560,7 @@ def _results_section(
 
     topic_cols = [col for col in topic_columns if col in shown_df.columns]
     finest_labels = label_layers[-1]
-    color_map = _topic_color_map(finest_labels)
+    color_map = topic_color_map(finest_labels)
     for _, row in shown_df.iterrows():
         passage_idx = int(row["passage_idx"])
         text = str(row["text"])

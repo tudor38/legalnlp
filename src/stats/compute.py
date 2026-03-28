@@ -136,7 +136,10 @@ def comment_ages_df(
 def _redline_context_fields(ctx) -> dict:
     if ctx is None:
         return {"sentence": [], "paragraph": None}
-    return {"sentence": [s.text for s in ctx.sentences], "paragraph": ctx.paragraph_text}
+    return {
+        "sentence": [s.text for s in ctx.sentences],
+        "paragraph": ctx.paragraph_text,
+    }
 
 
 def redline_ages_df(

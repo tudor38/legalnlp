@@ -267,11 +267,15 @@ def _render_as_expanded(
             ins_row, del_row = (
                 (row, partner_row) if row["Kind"] == "insertion" else (partner_row, row)
             )
-            with st.expander(f"{row['Author']} · {row['Date']} · edit", expanded=expand_all):
+            with st.expander(
+                f"{row['Author']} · {row['Date']} · edit", expanded=expand_all
+            ):
                 _render_pair_fields(ins_row, del_row, show_fields, field_map, columns)
         else:
             kind_label = f" · {row['Kind']}" if "Kind" in columns else ""
-            with st.expander(f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all):
+            with st.expander(
+                f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all
+            ):
                 _render_fields(row, show_fields, field_map, columns)
 
 
