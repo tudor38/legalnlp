@@ -1,4 +1,5 @@
 import html
+from collections import defaultdict
 from datetime import datetime
 from typing import NamedTuple
 
@@ -159,6 +160,137 @@ def render_author_bar(
 
 
 # ---------------------------------------------------------------------------
+# Timeline expanded-view helpers
+# ---------------------------------------------------------------------------
+def _detect_pairs(display: pd.DataFrame) -> tuple[dict[int, int], set[int]]:
+    """Find insertion/deletion pairs by the same author on the same date."""
+    if "Kind" not in display.columns:
+        return {}, set()
+    kind_set = set(display["Kind"].unique())
+    if "insertion" not in kind_set or "deletion" not in kind_set:
+        return {}, set()
+    ins_by_key: dict[tuple, list[int]] = defaultdict(list)
+    del_by_key: dict[tuple, list[int]] = defaultdict(list)
+    for idx, r in display.iterrows():
+        key = (r["Author"], r["Date"])
+        if r["Kind"] == "insertion":
+            ins_by_key[key].append(idx)
+        elif r["Kind"] == "deletion":
+            del_by_key[key].append(idx)
+    pair_partner: dict[int, int] = {}
+    pair_skip: set[int] = set()
+    for key in ins_by_key:
+        if key in del_by_key:
+            for ins_i, del_i in zip(ins_by_key[key], del_by_key[key]):
+                leader, follower = min(ins_i, del_i), max(ins_i, del_i)
+                pair_partner[leader] = follower
+                pair_skip.add(follower)
+    return pair_partner, pair_skip
+
+
+def _render_fields(
+    row: pd.Series,
+    labels: list[str],
+    field_map: dict[str, TimelineField],
+    columns: frozenset[str],
+) -> None:
+    """Render field values for a single row in expanded view."""
+    for label in labels:
+        tf = field_map.get(label)
+        if tf is None or tf.col not in columns:
+            continue
+        val = row[tf.col]
+        if not val and val != 0:
+            continue
+        if tf.col == "Resolved":
+            st.markdown(f"**Marked Resolved:** {'Yes' if val else 'No'}")
+        elif tf.highlight and tf.highlight in columns:
+            hl_val = row[tf.highlight]
+            st.markdown(f"**{label}:**")
+            items = val if isinstance(val, list) else [val]
+            kind_val = row.get("Kind") if "Kind" in columns else None
+            for item in items:
+                if kind_val in ("insertion", "deletion"):
+                    render_paragraph_with_redline(item, hl_val or "", kind_val)
+                else:
+                    render_paragraph_with_highlight(item, hl_val or "")
+        else:
+            st.markdown(f"**{label}:** {val}")
+
+
+def _render_pair_fields(
+    ins_row: pd.Series,
+    del_row: pd.Series,
+    labels: list[str],
+    field_map: dict[str, TimelineField],
+    columns: frozenset[str],
+) -> None:
+    """Render field values for an insertion+deletion pair in expanded view."""
+    for label in labels:
+        tf = field_map.get(label)
+        if tf is None or tf.col not in columns:
+            continue
+        if tf.highlight and tf.highlight in columns:
+            st.markdown(f"**{label}:**")
+            items = del_row[tf.col]
+            items = items if isinstance(items, list) else [items]
+            for item in items:
+                render_paragraph_with_redline_pair(
+                    item, del_row[tf.highlight] or "", ins_row[tf.highlight] or ""
+                )
+        else:
+            del_val = del_row[tf.col]
+            ins_val = ins_row[tf.col]
+            if not del_val and not ins_val:
+                continue
+            del_span = f'<span style="color:#ef4444;text-decoration:line-through">{html.escape(str(del_val))}</span>'
+            ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{html.escape(str(ins_val))}</span>'
+            st.markdown(f"**{label}:** {del_span} → {ins_span}", unsafe_allow_html=True)
+
+
+def _render_as_expanded(
+    display: pd.DataFrame,
+    show_fields: list[str],
+    field_map: dict[str, TimelineField],
+    expand_all: bool,
+) -> None:
+    columns = frozenset(display.columns)
+    pair_partner, pair_skip = _detect_pairs(display)
+    for idx, row in display.iterrows():
+        if idx in pair_skip:
+            continue
+        if idx in pair_partner:
+            partner_row = display.loc[pair_partner[idx]]
+            ins_row, del_row = (
+                (row, partner_row) if row["Kind"] == "insertion" else (partner_row, row)
+            )
+            with st.expander(f"{row['Author']} · {row['Date']} · edit", expanded=expand_all):
+                _render_pair_fields(ins_row, del_row, show_fields, field_map, columns)
+        else:
+            kind_label = f" · {row['Kind']}" if "Kind" in columns else ""
+            with st.expander(f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all):
+                _render_fields(row, show_fields, field_map, columns)
+
+
+def _render_as_table(
+    display: pd.DataFrame,
+    show_fields: list[str],
+    field_map: dict[str, TimelineField],
+) -> None:
+    keep_cols = ["Author", "Date"]
+    if "Kind" in display.columns:
+        keep_cols.append("Kind")
+    for label in show_fields:
+        tf = field_map.get(label)
+        if tf and tf.col.capitalize() in display.columns:
+            keep_cols.append(tf.col.capitalize())
+    st.dataframe(
+        display[[c for c in keep_cols if c in display.columns]],
+        hide_index=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Generalized timeline
 # ---------------------------------------------------------------------------
 def render_timeline(
@@ -293,116 +425,12 @@ def render_timeline(
         on_change=on_show_fields,
     )
 
-    # Build label → TimelineField lookup
     field_map = {f.label: f for f in fields}
 
+    if not show_fields:
+        return
+
     if expanded_view:
-        # Pre-compute insertion/deletion pairs by same author+date
-        pair_partner: dict[int, int] = {}
-        pair_skip: set[int] = set()
-        if "Kind" in display.columns:
-            kind_set = set(display["Kind"].unique())
-            if "insertion" in kind_set and "deletion" in kind_set:
-                from collections import defaultdict
-
-                ins_by_key: dict[tuple, list[int]] = defaultdict(list)
-                del_by_key: dict[tuple, list[int]] = defaultdict(list)
-                for idx, r in display.iterrows():
-                    key = (r["Author"], r["Date"])
-                    if r["Kind"] == "insertion":
-                        ins_by_key[key].append(idx)
-                    elif r["Kind"] == "deletion":
-                        del_by_key[key].append(idx)
-                for key in ins_by_key:
-                    if key in del_by_key:
-                        for ins_i, del_i in zip(ins_by_key[key], del_by_key[key]):
-                            leader, follower = min(ins_i, del_i), max(ins_i, del_i)
-                            pair_partner[leader] = follower
-                            pair_skip.add(follower)
-
-        def _render_fields(row, label_list):
-            for label in label_list:
-                tf = field_map.get(label)
-                if tf is None:
-                    continue
-                col_name = tf.col
-                hl_name = tf.highlight
-                if col_name not in display.columns:
-                    continue
-                val = row[col_name]
-                if not val and val != 0:
-                    continue
-                if col_name == "Resolved":
-                    st.markdown(f"**Marked Resolved:** {'Yes' if val else 'No'}")
-                elif hl_name and hl_name in display.columns:
-                    hl_val = row[hl_name]
-                    st.markdown(f"**{label}:**")
-                    items = val if isinstance(val, list) else [val]
-                    kind_val = row.get("Kind") if "Kind" in display.columns else None
-                    for item in items:
-                        if kind_val in ("insertion", "deletion"):
-                            render_paragraph_with_redline(item, hl_val or "", kind_val)
-                        else:
-                            render_paragraph_with_highlight(item, hl_val or "")
-                else:
-                    st.markdown(f"**{label}:** {val}")
-
-        for idx, row in display.iterrows():
-            if not show_fields:
-                break
-            if idx in pair_skip:
-                continue
-
-            if idx in pair_partner:
-                partner_row = display.loc[pair_partner[idx]]
-                ins_row = row if row["Kind"] == "insertion" else partner_row
-                del_row = partner_row if row["Kind"] == "insertion" else row
-                with st.expander(
-                    f"{row['Author']} · {row['Date']} · edit", expanded=expand_all
-                ):
-                    for label in show_fields:
-                        tf = field_map.get(label)
-                        if tf is None:
-                            continue
-                        col_name = tf.col
-                        hl_name = tf.highlight
-                        if col_name not in display.columns:
-                            continue
-                        if hl_name and hl_name in display.columns:
-                            del_hl = del_row[hl_name] or ""
-                            ins_hl = ins_row[hl_name] or ""
-                            st.markdown(f"**{label}:**")
-                            items = del_row[col_name]
-                            items = items if isinstance(items, list) else [items]
-                            for item in items:
-                                render_paragraph_with_redline_pair(item, del_hl, ins_hl)
-                        else:
-                            del_val = del_row[col_name]
-                            ins_val = ins_row[col_name]
-                            if not del_val and not ins_val:
-                                continue
-                            del_span = f'<span style="color:#ef4444;text-decoration:line-through">{html.escape(str(del_val))}</span>'
-                            ins_span = f'<span style="color:#3b82f6;text-decoration:underline">{html.escape(str(ins_val))}</span>'
-                            st.markdown(
-                                f"**{label}:** {del_span} → {ins_span}",
-                                unsafe_allow_html=True,
-                            )
-            else:
-                kind_label = f" · {row['Kind']}" if "Kind" in display.columns else ""
-                with st.expander(
-                    f"{row['Author']} · {row['Date']}{kind_label}", expanded=expand_all
-                ):
-                    _render_fields(row, show_fields)
+        _render_as_expanded(display, show_fields, field_map, expand_all)
     else:
-        if show_fields:
-            keep_cols = ["Author", "Date"]
-            if "Kind" in display.columns:
-                keep_cols.append("Kind")
-            for label in show_fields:
-                tf = field_map.get(label)
-                if tf and tf.col.capitalize() in display.columns:
-                    keep_cols.append(tf.col.capitalize())
-            st.dataframe(
-                display[[c for c in keep_cols if c in display.columns]],
-                hide_index=True,
-            )
+        _render_as_table(display, show_fields, field_map)
