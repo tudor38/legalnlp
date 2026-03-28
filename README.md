@@ -2,6 +2,8 @@
 
 A Streamlit app for analyzing Word documents. Comments, redlines, moves, topics, and search, all in one place. No data leaves your machine.
 
+<video src="assets/wordnlp_demo.mp4" controls width="100%"></video>
+
 ---
 
 ## Features
