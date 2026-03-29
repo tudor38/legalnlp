@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from src.utils.text import bm25_scores, tokenize
 

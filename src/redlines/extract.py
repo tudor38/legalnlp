@@ -29,8 +29,6 @@ from typing import Literal, Optional
 
 from src.shared import (
     W,
-    W14,
-    W15,
     _tag,
     Span,
     SentenceSpan,

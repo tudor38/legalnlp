@@ -96,9 +96,9 @@ class TestParseComments:
 
     def test_comment_missing_id_skipped(self):
         xml = _comments_xml(
-            f'<w:comment w:author="Alice" w:date="2024-01-01T00:00:00Z">'
-            f"<w:p><w:r><w:t>no id</w:t></w:r></w:p>"
-            f"</w:comment>"
+            '<w:comment w:author="Alice" w:date="2024-01-01T00:00:00Z">'
+            "<w:p><w:r><w:t>no id</w:t></w:r></w:p>"
+            "</w:comment>"
         )
         comments, _ = _parse_comments(xml)
         assert len(comments) == 0

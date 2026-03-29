@@ -1,6 +1,5 @@
-import pytest
 
-from src.shared import Span, SentenceSpan, WordVersion, detect_version
+from src.shared import Span, WordVersion, detect_version
 
 
 class TestSpan:

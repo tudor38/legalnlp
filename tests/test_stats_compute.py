@@ -1,7 +1,6 @@
-import pytest
 
 from src.comments.extract import Comment
-from src.stats.compute import CommentMetrics, comment_metrics, latest_date
+from src.stats.compute import comment_metrics, latest_date
 
 
 def _comment(id: str, date: str, resolved: bool = False, replies=None) -> Comment:

@@ -55,7 +55,6 @@ from src.topics.model import (
 from src.topics.render import render_interactive_map, show_map
 
 
-
 file_bytes = require_document()
 
 doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
@@ -341,7 +340,9 @@ else:
             try:
                 pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
                 matched_indices = [
-                    idx for idx, text in enumerate(docs) if pattern.search(text, timeout=1.0)
+                    idx
+                    for idx, text in enumerate(docs)
+                    if pattern.search(text, timeout=1.0)
                 ]
             except TimeoutError:
                 st.warning("Regex pattern timed out. Please simplify your expression.")
@@ -369,7 +370,6 @@ else:
                 int(i) for i in ranked if cosine_scores[i] >= semantic_min_score
             ][:rank_limit]
             score_map = {int(i): float(cosine_scores[i]) for i in matched_indices}
-
 
 
 st.subheader("Topic Explorer")
@@ -508,7 +508,9 @@ def _results_section(
     )
 
     st.caption(f"{len(results_df)} results")
-    show_expanded, _collapse = expanded_view_controls("topic_show_expanded", "topic_collapse")
+    show_expanded, _collapse = expanded_view_controls(
+        "topic_show_expanded", "topic_collapse"
+    )
     expand_all = show_expanded and not _collapse
     if not show_expanded:
         st.dataframe(

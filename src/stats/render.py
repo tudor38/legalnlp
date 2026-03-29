@@ -5,7 +5,6 @@ from typing import NamedTuple
 
 import numpy as np
 
-from src.comments.extract import Comment
 from src.stats.compute import CommentMetrics
 from src.stats.config import CFG
 from src.utils.page import expanded_view_controls
@@ -308,8 +307,8 @@ def render_timeline(
     display_cols: list[str],  # df columns to include in table
     default_fields: list[str],  # default multiselect selection
     all_authors: list[str] | None = None,
-    expanded_key: str = "expanded_view",   # permanent key
-    collapse_key: str = "collapse",         # permanent key
+    expanded_key: str = "expanded_view",  # permanent key
+    collapse_key: str = "collapse",  # permanent key
     show_fields_key: str = "_show_fields",
     on_show_fields=None,
 ) -> None:

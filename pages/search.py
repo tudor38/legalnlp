@@ -183,7 +183,9 @@ if method == "Semantic":
     model_name = st.sidebar.selectbox(
         "Embedding model",
         _model_options,
-        index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
+        index=_model_options.index(_saved_model)
+        if _saved_model in _model_options
+        else 0,
         key="search_model",
     )
     st.session_state[KEY_SEARCH_PREF_MODEL] = model_name
@@ -213,7 +215,11 @@ if st.session_state.get(KEY_SEARCH_HITS_KEY) != search_key:
                 st.warning(f"Invalid regex: {e}")
                 st.stop()
             try:
-                hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t, timeout=1.0)]
+                hits = [
+                    (i, 1.0)
+                    for i, t in enumerate(texts)
+                    if pattern.search(t, timeout=1.0)
+                ]
             except TimeoutError:
                 st.warning("Regex pattern timed out. Please simplify your expression.")
                 st.stop()
