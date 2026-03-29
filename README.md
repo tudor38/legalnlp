@@ -59,36 +59,10 @@ uv run streamlit run app.py
 git clone https://github.com/your-org/wordnlp.git
 cd wordnlp
 pip install -e .
-python -m spacy download en_core_web_sm
 streamlit run app.py
 ```
 
 The app will open at `http://localhost:8501`.
-
----
-
-## Project Structure
-
-```
-wordnlp/
-├── app.py                  # Entry point — registers all pages
-├── pages/                  # One file per Streamlit page
-│   ├── document_statistics.py
-│   ├── document_terms.py
-│   ├── topic_explorer.py
-│   └── search.py
-├── src/                    # Core logic (no Streamlit in hot paths)
-│   ├── app_state.py        # Session state keys and typed accessors
-│   ├── comments/           # Comment extraction and rendering
-│   ├── redlines/           # Redline and move extraction
-│   ├── stats/              # Compute, render, and config helpers
-│   └── utils/              # Text processing, model loading, page helpers
-├── config/
-│   └── app.toml            # Tuneable parameters (BM25, UMAP, thresholds, etc.)
-├── assets/
-│   └── logo.svg
-└── tests/
-```
 
 ## Configuration
 
