@@ -1,6 +1,6 @@
 import hashlib
 import io
-import re
+import regex as re
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,6 @@ from src.app_state import (
     KEY_TOPIC_MAP_SIG,
     KEY_TOPIC_MAP_TYPE_PREF,
     KEY_TOPIC_PREF_ANALYSIS_UNIT,
-    KEY_TOPIC_PREF_CUSTOM_MODEL,
     KEY_TOPIC_PREF_EMBEDDING_MODEL,
     KEY_TOPIC_PREF_HIGHLEVEL,
     KEY_TOPIC_PREF_LOWLEVEL,
@@ -34,7 +33,7 @@ from src.app_state import (
 )
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_sentence_transformer
-from src.utils.page import require_document
+from src.utils.page import expanded_view_controls, require_document
 from src.stats.config import CFG
 from src.utils.text import (
     bm25_scores,
@@ -89,28 +88,13 @@ min_chars = st.sidebar.slider(
 st.session_state[KEY_TOPIC_PREF_MIN_CHARS] = min_chars
 
 _saved_model = st.session_state.get(KEY_TOPIC_PREF_EMBEDDING_MODEL)
-_selected_model = st.sidebar.selectbox(
+embedding_model_name = st.sidebar.selectbox(
     "Embedding model",
-    options=_model_options + ["Custom…"],
+    options=_model_options,
     index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
     key="topic_embedding_model",
     help="This model converts each paragraph into vectors before topic clustering.",
 )
-if _selected_model == "Custom…":
-    embedding_model_name = st.sidebar.text_input(
-        "HuggingFace model ID",
-        value=st.session_state.get(KEY_TOPIC_PREF_CUSTOM_MODEL, ""),
-        placeholder="e.g. BAAI/bge-small-en-v1.5",
-        key="topic_custom_model",
-    ).strip()
-    st.session_state[KEY_TOPIC_PREF_CUSTOM_MODEL] = embedding_model_name
-    if not embedding_model_name:
-        st.info(
-            "Enter a HuggingFace model ID in the sidebar to use a custom embedding model."
-        )
-        st.stop()
-else:
-    embedding_model_name = _selected_model
 st.session_state[KEY_TOPIC_PREF_EMBEDDING_MODEL] = embedding_model_name
 
 if analysis_unit == "Sentence":
@@ -352,8 +336,11 @@ else:
             try:
                 pattern = re.compile(active_query.strip(), flags=re.IGNORECASE)
                 matched_indices = [
-                    idx for idx, text in enumerate(docs) if pattern.search(text)
+                    idx for idx, text in enumerate(docs) if pattern.search(text, timeout=1.0)
                 ]
+            except re.TimeoutError:
+                st.warning("Regex pattern timed out. Please simplify your expression.")
+                matched_indices = []
             except re.error as e:
                 st.warning(f"Invalid regex: {e}")
                 matched_indices = []
@@ -425,11 +412,8 @@ max_rows = st.sidebar.slider(
     "Max rows", min_value=10, max_value=500, value=100, step=10, key="topic_max_rows"
 )
 
-# Init permanent keys, then always seed widget keys from them (same pattern as document_terms).
 for _k in ("topic_show_expanded", "topic_collapse"):
     st.session_state.setdefault(_k, False)
-st.session_state["_topic_show_expanded"] = st.session_state["topic_show_expanded"]
-st.session_state["_topic_collapse"] = st.session_state["topic_collapse"]
 
 
 @st.fragment
@@ -519,25 +503,8 @@ def _results_section(
     )
 
     st.caption(f"{len(results_df)} results")
-    _col_v, _col_c = st.columns([1, 1])
-    show_expanded = _col_v.toggle(
-        "Show expanded view",
-        key="_topic_show_expanded",
-        on_change=lambda: st.session_state.update(
-            {"topic_show_expanded": st.session_state.get("_topic_show_expanded", False)}
-        ),
-    )
-    if show_expanded:
-        _collapse = _col_c.toggle(
-            "Collapse",
-            key="_topic_collapse",
-            on_change=lambda: st.session_state.update(
-                {"topic_collapse": st.session_state.get("_topic_collapse", False)}
-            ),
-        )
-    else:
-        _collapse = False
-    expand_all = not _collapse if show_expanded else False
+    show_expanded, _collapse = expanded_view_controls("topic_show_expanded", "topic_collapse")
+    expand_all = show_expanded and not _collapse
     if not show_expanded:
         st.dataframe(
             results_df.head(max_rows),
@@ -572,7 +539,7 @@ def _results_section(
                     highlighted = highlight_regex(
                         text, re.compile(search_query.strip(), flags=re.IGNORECASE)
                     )
-                except re.error:
+                except (re.error, re.TimeoutError):
                     highlighted = highlight_term(text, "")
             case _:
                 highlighted = highlight_term(text, search_query)

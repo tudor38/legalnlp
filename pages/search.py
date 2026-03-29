@@ -8,23 +8,24 @@ Supports three search methods:
   Semantic  — cosine similarity via sentence-transformers embeddings
 """
 
-import html
 import io
-import re
+import regex as re
 
 import numpy as np
 import streamlit as st
+from annotated_text import annotated_text
 
 from src.app_state import (
     KEY_SEARCH_HITS,
     KEY_SEARCH_HITS_KEY,
-    KEY_SEARCH_PREF_CUSTOM_MODEL,
     KEY_SEARCH_PREF_METHOD,
     KEY_SEARCH_PREF_MIN_SCORE,
     KEY_SEARCH_PREF_MODEL,
     KEY_SEARCH_PREF_QUERY,
     KEY_SEARCH_STORED_FILES,
     KEY_SEARCH_VIEW,
+    MAX_UPLOAD_MB,
+    BYTES_PER_MB,
     MODEL_MINILM,
     MODEL_MPNET,
     get_file_bytes,
@@ -36,10 +37,10 @@ from src.utils.models import get_sentence_transformer
 from src.stats.config import CFG
 from src.utils.text import (
     TOPIC_PALETTE,
+    annotate_query_tokens,
+    annotate_regex,
+    annotate_term,
     bm25_scores,
-    highlight_query_tokens,
-    highlight_regex,
-    highlight_term,
 )
 
 
@@ -83,16 +84,14 @@ uploaded = st.sidebar.file_uploader(
     label_visibility="collapsed",
 )
 
-_MAX_UPLOAD_MB = 25
-
 # Persist extra uploaded files across navigations
 if uploaded:
-    oversized = [f for f in uploaded if f.size > _MAX_UPLOAD_MB * 1024 * 1024]
-    valid = [f for f in uploaded if f.size <= _MAX_UPLOAD_MB * 1024 * 1024]
+    oversized = [f for f in uploaded if f.size > MAX_UPLOAD_MB * BYTES_PER_MB]
+    valid = [f for f in uploaded if f.size <= MAX_UPLOAD_MB * BYTES_PER_MB]
     for f in oversized:
         st.sidebar.warning(
-            f"'{f.name}' ({f.size / (1024 * 1024):.1f} MB) exceeds the "
-            f"{_MAX_UPLOAD_MB} MB limit and was skipped."
+            f"'{f.name}' ({f.size / BYTES_PER_MB:.1f} MB) exceeds the "
+            f"{MAX_UPLOAD_MB} MB limit and was skipped."
         )
     st.session_state[KEY_SEARCH_STORED_FILES] = [(f.name, f.getvalue()) for f in valid]
 
@@ -181,29 +180,12 @@ if method in ("Relevance", "Semantic"):
 _model_options = [MODEL_MINILM, MODEL_MPNET]
 if method == "Semantic":
     _saved_model = st.session_state.get(KEY_SEARCH_PREF_MODEL)
-    _selected = st.sidebar.selectbox(
+    model_name = st.sidebar.selectbox(
         "Embedding model",
-        _model_options + ["Custom…"],
-        index=_model_options.index(_saved_model)
-        if _saved_model in _model_options
-        else 0,
+        _model_options,
+        index=_model_options.index(_saved_model) if _saved_model in _model_options else 0,
         key="search_model",
     )
-    if _selected == "Custom…":
-        model_name = st.sidebar.text_input(
-            "HuggingFace model ID",
-            value=st.session_state.get(KEY_SEARCH_PREF_CUSTOM_MODEL, ""),
-            placeholder="e.g. BAAI/bge-small-en-v1.5",
-            key="search_custom_model",
-        ).strip()
-        st.session_state[KEY_SEARCH_PREF_CUSTOM_MODEL] = model_name
-        if not model_name:
-            st.info(
-                "Enter a HuggingFace model ID above to use a custom embedding model."
-            )
-            st.stop()
-    else:
-        model_name = _selected
     st.session_state[KEY_SEARCH_PREF_MODEL] = model_name
 
 if not query or not query.strip():
@@ -230,7 +212,11 @@ if st.session_state.get(KEY_SEARCH_HITS_KEY) != search_key:
             except re.error as e:
                 st.warning(f"Invalid regex: {e}")
                 st.stop()
-            hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t)]
+            try:
+                hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t, timeout=1.0)]
+            except re.TimeoutError:
+                st.warning("Regex pattern timed out. Please simplify your expression.")
+                st.stop()
         case "Relevance":
             scores = bm25_scores(texts, q)
             ranked = np.argsort(-scores)
@@ -273,17 +259,14 @@ if not hits:
 
 total_hits = len(hits)
 
-# For term/regex methods, compile pattern for highlighting (needed on every rerun, including cached pagination)
-match method:
-    case "Keyword":
+# Compile pattern for Regex highlighting (needed on every rerun, including cached pagination)
+if method == "Regex":
+    try:
+        pattern = re.compile(q, re.IGNORECASE)
+    except re.error:
         pattern = re.compile(re.escape(q), re.IGNORECASE)
-    case "Regex":
-        try:
-            pattern = re.compile(q, re.IGNORECASE)
-        except re.error:
-            pattern = re.compile(re.escape(q), re.IGNORECASE)
-    case _:
-        pattern = None
+else:
+    pattern = None
 
 # Assign a color to each unique document name
 unique_docs = list(dict.fromkeys(doc_names))
@@ -341,24 +324,21 @@ else:
 
         match method:
             case "Keyword":
-                display = highlight_term(passage, q, color)
+                display_parts = annotate_term(passage, q, color)
                 score_str = ""
             case "Regex":
-                display = highlight_regex(passage, pattern, color)
+                display_parts = annotate_regex(passage, pattern, color)
                 score_str = ""
             case "Relevance" | "Semantic":
-                display = highlight_query_tokens(passage, q, color)
+                display_parts = annotate_query_tokens(passage, q, color)
                 score_str = f"{score:.2f}"
 
         with st.container(border=True):
             col_doc, col_score = st.columns([5, 1])
             with col_doc:
-                st.markdown(
-                    f'<span style="background:{color};padding:2px 8px;border-radius:4px;font-size:0.8em">{html.escape(doc_name)}</span>'
-                    f' <span style="font-size:0.8em;color:gray">#{para_idx}</span>',
-                    unsafe_allow_html=True,
-                )
+                st.badge(doc_name, color=color)
+                st.caption(f"#{para_idx}")
             with col_score:
                 if score_str:
                     st.caption(score_str)
-            st.markdown(display, unsafe_allow_html=True)
+            annotated_text(*display_parts)

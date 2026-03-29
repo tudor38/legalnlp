@@ -3,7 +3,7 @@ Shared text processing utilities.
 """
 
 import math
-import re
+import regex as re
 from collections.abc import Sequence
 from html import escape as _escape
 
@@ -95,12 +95,66 @@ def highlight_regex(text: str, pattern: re.Pattern, color: str = "") -> str:
     style = f' style="background:{color}"' if color else ""
     parts: list[str] = []
     last = 0
-    for m in pattern.finditer(text):
+    for m in pattern.finditer(text, timeout=1.0):
         parts.append(_escape(text[last : m.start()]))
         parts.append(f"<mark{style}>{_escape(m.group(0))}</mark>")
         last = m.end()
     parts.append(_escape(text[last:]))
     return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# annotated_text-compatible helpers (no HTML, no unsafe_allow_html)
+# ---------------------------------------------------------------------------
+def annotate_term(text: str, query: str, color: str = "") -> list:
+    if not query.strip():
+        return [text]
+    parts = []
+    last = 0
+    for m in re.compile(re.escape(query), flags=re.IGNORECASE).finditer(text):
+        if m.start() > last:
+            parts.append(text[last : m.start()])
+        parts.append((m.group(0), "", color))
+        last = m.end()
+    if last < len(text):
+        parts.append(text[last:])
+    return parts or [text]
+
+
+def annotate_regex(text: str, pattern: re.Pattern, color: str = "") -> list:
+    parts = []
+    last = 0
+    try:
+        for m in pattern.finditer(text, timeout=1.0):
+            if m.start() > last:
+                parts.append(text[last : m.start()])
+            parts.append((m.group(0), "", color))
+            last = m.end()
+    except re.TimeoutError:
+        return [text]
+    if last < len(text):
+        parts.append(text[last:])
+    return parts or [text]
+
+
+def annotate_query_tokens(text: str, query: str, color: str = "") -> list:
+    stemmed_terms = {
+        _stemmer.stemWord(term) for term in tokenize(query) if term not in STOP_WORDS
+    }
+    if not stemmed_terms:
+        return [text]
+    parts = []
+    last = 0
+    for m in re.finditer(r"\b\w+\b", text):
+        word = m.group(0)
+        if _stemmer.stemWord(word.lower()) in stemmed_terms:
+            if m.start() > last:
+                parts.append(text[last : m.start()])
+            parts.append((word, "", color))
+            last = m.end()
+    if last < len(text):
+        parts.append(text[last:])
+    return parts or [text]
 
 
 def tokenize(text: str) -> list[str]:

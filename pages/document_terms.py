@@ -19,8 +19,9 @@ from src.app_state import (
 )
 from src.comments.extract import extract_paragraphs
 from src.utils.models import get_spacy_nlp
-from src.utils.page import require_document
-from src.utils.text import highlight_regex
+from src.utils.page import expanded_view_controls, require_document
+from annotated_text import annotated_text
+from src.utils.text import annotate_regex
 
 
 @st.cache_data(show_spinner=False, max_entries=5)
@@ -149,7 +150,7 @@ def _render_expanded(
 ) -> None:
     for _, row in df.iterrows():
         term = str(row[heading_col])
-        context = highlight_regex(
+        context_parts = annotate_regex(
             row["Context"],
             re.compile(
                 r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])",
@@ -157,7 +158,7 @@ def _render_expanded(
             ),
         )
         with st.expander(f"#{row['Para']} — {html.escape(term)}", expanded=expand_all):
-            st.markdown(context, unsafe_allow_html=True)
+            annotated_text(*context_parts)
 
 
 @st.cache_data(show_spinner=False, max_entries=5)
@@ -178,30 +179,6 @@ for _s in _DT_SECTIONS:
     st.session_state.setdefault(f"dt_{_s}_expanded", False)
     st.session_state.setdefault(f"dt_{_s}_collapse", False)
 
-
-def _expanded_view_controls(section: str) -> tuple[bool, bool]:
-    """Render Show expanded view / Show table toggle + Collapse all toggle for a tab section.
-
-    Returns (expanded, collapse). value= seeds from the permanent key when the
-    widget key is absent; on_change keeps the permanent key up to date.
-    """
-    _col_v, _col_c = st.columns([1, 1])
-    expanded = _col_v.toggle(
-        "Show expanded view",
-        value=st.session_state.get(f"dt_{section}_expanded", False),
-        key=f"_dt_{section}_expanded",
-        on_change=make_store(f"dt_{section}_expanded"),
-    )
-    if expanded:
-        collapse = _col_c.toggle(
-            "Collapse all",
-            value=st.session_state.get(f"dt_{section}_collapse", False),
-            key=f"_dt_{section}_collapse",
-            on_change=make_store(f"dt_{section}_collapse"),
-        )
-    else:
-        collapse = False
-    return expanded, collapse
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +350,9 @@ for (
             st.info(_empty_msg)
         else:
             st.caption(f"{len(_df)} {_count_label}")
-            _expanded, _collapse = _expanded_view_controls(_section)
+            _expanded, _collapse = expanded_view_controls(
+                f"dt_{_section}_expanded", f"dt_{_section}_collapse"
+            )
             if not _expanded:
                 st.dataframe(
                     _df, width="stretch", hide_index=True, column_config=_col_config

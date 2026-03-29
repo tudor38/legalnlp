@@ -21,7 +21,7 @@ def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -
         if idx != -1:
             events.append((idx, idx + len(inserted), "ins", inserted))
     if not events:
-        st.markdown(f"> {html.escape(para)}", unsafe_allow_html=True)
+        st.markdown(f"> {para}")
         return
     events.sort(key=lambda e: e[0])
     parts = []
@@ -46,7 +46,7 @@ def render_paragraph_with_redline_pair(para: str, deleted: str, inserted: str) -
 def render_paragraph_with_redline(para: str, text: str, kind: str) -> None:
     idx = para.find(text)
     if idx == -1:
-        st.markdown(f"> {html.escape(para)}", unsafe_allow_html=True)
+        st.markdown(f"> {para}")
         return
     before = html.escape(para[:idx])
     after = html.escape(para[idx + len(text) :])

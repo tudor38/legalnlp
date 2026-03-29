@@ -29,6 +29,13 @@ from __future__ import annotations
 import streamlit as st
 
 # ---------------------------------------------------------------------------
+# Upload limits — shared across pages that accept file uploads
+# ---------------------------------------------------------------------------
+
+MAX_UPLOAD_MB = 25
+BYTES_PER_MB = 1024 * 1024
+
+# ---------------------------------------------------------------------------
 # Key constants — the ONLY place these strings should appear
 # ---------------------------------------------------------------------------
 

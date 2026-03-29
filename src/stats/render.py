@@ -8,6 +8,7 @@ import numpy as np
 from src.comments.extract import Comment
 from src.stats.compute import CommentMetrics
 from src.stats.config import CFG
+from src.utils.page import expanded_view_controls
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -307,11 +308,9 @@ def render_timeline(
     display_cols: list[str],  # df columns to include in table
     default_fields: list[str],  # default multiselect selection
     all_authors: list[str] | None = None,
-    expanded_view_key: str = "_expanded_view",
-    expand_all_key: str = "_expand_all",
+    expanded_key: str = "expanded_view",   # permanent key
+    collapse_key: str = "collapse",         # permanent key
     show_fields_key: str = "_show_fields",
-    on_expanded_view=None,
-    on_expand_all=None,
     on_show_fields=None,
 ) -> None:
     """
@@ -407,21 +406,7 @@ def render_timeline(
     display = pd.DataFrame(display).sort_values("Date").reset_index(drop=True)
 
     # Table controls
-    col_view, col_expand = st.columns([1, 1])
-    expanded_view = col_view.toggle(
-        "Show expanded view",
-        key=expanded_view_key,
-        on_change=on_expanded_view,
-    )
-    collapse = (
-        col_expand.toggle(
-            "Collapse",
-            key=expand_all_key,
-            on_change=on_expand_all,
-        )
-        if expanded_view
-        else False
-    )
+    expanded_view, collapse = expanded_view_controls(expanded_key, collapse_key)
     expand_all = expanded_view and not collapse
 
     all_field_labels = [f.label for f in fields]

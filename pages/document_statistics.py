@@ -46,6 +46,8 @@ from src.app_state import (
     KEY_MOVE_TL_FIELDS,
     KEY_MOVE_VIEW,
     KEY_STATS_MAIN_TAB,
+    MAX_UPLOAD_MB,
+    BYTES_PER_MB,
     get_file_bytes,
     get_file_name,
     set_file_bytes,
@@ -57,8 +59,6 @@ from src.stats.config import CFG
 
 _ALLOWED_FILETYPES = CFG.display.allowed_filetypes
 _CLOSED_DATE_OFFSET = CFG.display.closed_date_offset_days
-_MAX_UPLOAD_MB = 25
-_BYTES_PER_MB = 1024 * 1024
 _KEY_UPLOAD_SIZE_ERROR = "_upload_size_error"
 
 
@@ -130,14 +130,8 @@ for key, val in DEFAULTS.items():
 _CB: dict[str, tuple[str, object]] = {
     "is_closed": (KEY_DOC_FINALIZED, False),
     "closed_date": (KEY_DOC_FINALIZED_DATE, None),
-    "expanded_view": (KEY_COMMENT_TL_EXPANDED, False),
-    "expand_all": (KEY_COMMENT_TL_EXPAND_ALL, False),
     "show_fields": (KEY_COMMENT_TL_FIELDS, []),
-    "r_expanded_view": (KEY_REDLINE_TL_EXPANDED, False),
-    "r_expand_all": (KEY_REDLINE_TL_EXPAND_ALL, False),
     "r_show_fields": (KEY_REDLINE_TL_FIELDS, []),
-    "m_expanded_view": (KEY_MOVE_TL_EXPANDED, False),
-    "m_expand_all": (KEY_MOVE_TL_EXPAND_ALL, False),
     "m_show_fields": (KEY_MOVE_TL_FIELDS, []),
     "timeline_authors": (KEY_FILTER_AUTHORS, []),
     "main_tab": (KEY_STATS_MAIN_TAB, MAIN_TABS.comments),
@@ -149,14 +143,8 @@ _stores = {name: make_store(key, default) for name, (key, default) in _CB.items(
 
 _store_is_closed = _stores["is_closed"]
 _store_closed_date = _stores["closed_date"]
-_store_expanded_view = _stores["expanded_view"]
-_store_expand_all = _stores["expand_all"]
 _store_show_fields = _stores["show_fields"]
-_store_r_expanded_view = _stores["r_expanded_view"]
-_store_r_expand_all = _stores["r_expand_all"]
 _store_r_show_fields = _stores["r_show_fields"]
-_store_m_expanded_view = _stores["m_expanded_view"]
-_store_m_expand_all = _stores["m_expand_all"]
 _store_m_show_fields = _stores["m_show_fields"]
 _store_timeline_authors = _stores["timeline_authors"]
 _store_main_tab = _stores["main_tab"]
@@ -175,10 +163,10 @@ def _store_date_range():
 def _store_uploaded_file():
     f = st.session_state.get("_doc_upload")
     if f is not None:
-        if f.size > _MAX_UPLOAD_MB * _BYTES_PER_MB:
+        if f.size > MAX_UPLOAD_MB * BYTES_PER_MB:
             st.session_state[_KEY_UPLOAD_SIZE_ERROR] = (
-                f"'{f.name}' is {f.size / _BYTES_PER_MB:.1f} MB — "
-                f"maximum allowed size is {_MAX_UPLOAD_MB} MB."
+                f"'{f.name}' is {f.size / BYTES_PER_MB:.1f} MB — "
+                f"maximum allowed size is {MAX_UPLOAD_MB} MB."
             )
             return
         st.cache_data.clear()
@@ -321,12 +309,7 @@ def _render_comment_timeline(
     filtered_c_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in (
-        KEY_COMMENT_TL_EXPANDED,
-        KEY_COMMENT_TL_EXPAND_ALL,
-        KEY_COMMENT_TL_FIELDS,
-    ):
-        seed_widget(key)
+    seed_widget(KEY_COMMENT_TL_FIELDS)
     render_timeline(
         filtered_c_df,
         "Who commented? When?",
@@ -343,11 +326,9 @@ def _render_comment_timeline(
         ],
         default_fields=["Marked Resolved", "Sentence", "Comment"],
         all_authors=all_authors,
-        expanded_view_key="_comment_tl_expanded",
-        expand_all_key="_comment_tl_expand_all",
+        expanded_key=KEY_COMMENT_TL_EXPANDED,
+        collapse_key=KEY_COMMENT_TL_EXPAND_ALL,
         show_fields_key="_comment_tl_fields",
-        on_expanded_view=_store_expanded_view,
-        on_expand_all=_store_expand_all,
         on_show_fields=_store_show_fields,
     )
 
@@ -356,12 +337,7 @@ def _render_redline_timeline(
     filtered_r_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in (
-        KEY_REDLINE_TL_EXPANDED,
-        KEY_REDLINE_TL_EXPAND_ALL,
-        KEY_REDLINE_TL_FIELDS,
-    ):
-        seed_widget(key)
+    seed_widget(KEY_REDLINE_TL_FIELDS)
     render_timeline(
         filtered_r_df,
         "Who redlined? When?",
@@ -369,11 +345,9 @@ def _render_redline_timeline(
         display_cols=["author", "date", "kind", "text", "sentence", "paragraph"],
         default_fields=["Redline", "Sentence"],
         all_authors=all_authors,
-        expanded_view_key="_redline_tl_expanded",
-        expand_all_key="_redline_tl_expand_all",
+        expanded_key=KEY_REDLINE_TL_EXPANDED,
+        collapse_key=KEY_REDLINE_TL_EXPAND_ALL,
         show_fields_key="_redline_tl_fields",
-        on_expanded_view=_store_r_expanded_view,
-        on_expand_all=_store_r_expand_all,
         on_show_fields=_store_r_show_fields,
     )
 
@@ -461,8 +435,7 @@ def _render_move_timeline(
     filtered_m_df: pd.DataFrame,
     all_authors: list[str],
 ) -> None:
-    for key in (KEY_MOVE_TL_EXPANDED, KEY_MOVE_TL_EXPAND_ALL, KEY_MOVE_TL_FIELDS):
-        seed_widget(key)
+    seed_widget(KEY_MOVE_TL_FIELDS)
     render_timeline(
         filtered_m_df,
         "Who moved text? When?",
@@ -477,11 +450,9 @@ def _render_move_timeline(
         ],
         default_fields=[f.label for f in MOVE_FIELDS],
         all_authors=all_authors,
-        expanded_view_key="_move_tl_expanded",
-        expand_all_key="_move_tl_expand_all",
+        expanded_key=KEY_MOVE_TL_EXPANDED,
+        collapse_key=KEY_MOVE_TL_EXPAND_ALL,
         show_fields_key="_move_tl_fields",
-        on_expanded_view=_store_m_expanded_view,
-        on_expand_all=_store_m_expand_all,
         on_show_fields=_store_m_show_fields,
     )
 
