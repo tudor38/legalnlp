@@ -336,7 +336,7 @@ else:
         with st.container(border=True):
             col_doc, col_score = st.columns([5, 1])
             with col_doc:
-                st.badge(doc_name, color=color)
+                annotated_text((doc_name, "", color))
                 st.caption(f"#{para_idx}")
             with col_score:
                 if score_str:
