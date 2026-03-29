@@ -24,7 +24,7 @@ Unsupervised topic modelling across the document's paragraphs or sentences using
 - Interactive datamapplot map with hover text, or a static PNG fallback
 - Filter and search results by keyword, regex, BM25 relevance, or semantic similarity
 - Optional seed words to guide topic discovery
-- Configurable embedding model (built-in or any HuggingFace model ID)
+- Configurable embedding model (MiniLM or MPNet)
 
 ### Multi-Doc Search
 Full-text search across one or more uploaded documents:
@@ -32,7 +32,7 @@ Full-text search across one or more uploaded documents:
 - **Keyword** — exact substring match with highlighting
 - **Regex** — regular expression match
 - **Relevance** — BM25 ranking with stemmed token highlighting
-- **Semantic** — cosine similarity via sentence-transformers; supports built-in models or any HuggingFace model ID
+- **Semantic** — cosine similarity via sentence-transformers (MiniLM or MPNet)
 - Paginated results; search results are cached so pagination never re-runs the search
 
 ---
@@ -121,3 +121,4 @@ All dependencies are listed in `pyproject.toml`. Key ones:
 | `datamapplot` | Topic map visualisation |
 | `plotly` + `altair` | Charts |
 | `pystemmer` | Stemming for BM25 and token highlighting |
+| `regex` | ReDoS-safe regex with timeout support |

@@ -130,8 +130,12 @@ def _on_search_submit() -> None:
     )
 
 
-@st.fragment
 def _search_method_pills() -> None:
+    def _on_method_change() -> None:
+        st.session_state[KEY_TOPIC_ACTIVE_METHOD] = (
+            st.session_state.get(WKEY_TOPIC_SEARCH_METHOD) or "Keyword"
+        )
+
     st.session_state.setdefault(WKEY_TOPIC_SEARCH_METHOD, "Keyword")
     st.pills(
         "Search type",
@@ -139,6 +143,7 @@ def _search_method_pills() -> None:
         key=WKEY_TOPIC_SEARCH_METHOD,
         label_visibility="collapsed",
         selection_mode="single",
+        on_change=_on_method_change,
     )
 
 
