@@ -1,7 +1,7 @@
 import hashlib
 import html
 import io
-import re
+import regex as re
 
 import pandas as pd
 import spacy

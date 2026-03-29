@@ -343,7 +343,7 @@ else:
                 matched_indices = [
                     idx for idx, text in enumerate(docs) if pattern.search(text, timeout=1.0)
                 ]
-            except re.TimeoutError:
+            except TimeoutError:
                 st.warning("Regex pattern timed out. Please simplify your expression.")
                 matched_indices = []
             except re.error as e:
@@ -544,7 +544,7 @@ def _results_section(
                     highlighted = highlight_regex(
                         text, re.compile(search_query.strip(), flags=re.IGNORECASE)
                     )
-                except (re.error, re.TimeoutError):
+                except (re.error, TimeoutError):
                     highlighted = highlight_term(text, "")
             case _:
                 highlighted = highlight_term(text, search_query)

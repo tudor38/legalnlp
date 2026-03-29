@@ -130,7 +130,7 @@ def annotate_regex(text: str, pattern: re.Pattern, color: str = "") -> list:
                 parts.append(text[last : m.start()])
             parts.append((m.group(0), "", color))
             last = m.end()
-    except re.TimeoutError:
+    except TimeoutError:
         return [text]
     if last < len(text):
         parts.append(text[last:])

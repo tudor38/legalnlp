@@ -214,7 +214,7 @@ if st.session_state.get(KEY_SEARCH_HITS_KEY) != search_key:
                 st.stop()
             try:
                 hits = [(i, 1.0) for i, t in enumerate(texts) if pattern.search(t, timeout=1.0)]
-            except re.TimeoutError:
+            except TimeoutError:
                 st.warning("Regex pattern timed out. Please simplify your expression.")
                 st.stop()
         case "Relevance":
