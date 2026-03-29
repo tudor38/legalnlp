@@ -34,7 +34,6 @@ def _diamond_icon() -> Image.Image:
 
 
 st.set_page_config(page_title="Word NLP", page_icon=_diamond_icon(), layout="wide")
-st.logo("assets/logo.svg")
 
 doc_stats = st.Page(
     "pages/document_statistics.py",
