@@ -30,6 +30,8 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint]
 select = [
     "E",
     "F",
@@ -41,7 +43,7 @@ select = [
     "ANN",
     "UP",
 ]
-ignore = ["E203", "W503"]
+ignore = ["E203"]
 exclude = [".venv", ".git", "__pycache__"]
 
 [build-system]

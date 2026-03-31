@@ -1,20 +1,17 @@
-import io
 from pathlib import Path
 from typing import NamedTuple
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 
-from src.comments.extract import extract_comments, extract_paragraphs
-from src.redlines.extract import extract_redlines, extract_moves
 from src.shared import DocxParseError
 from src.stats.compute import (
     build_stats_dfs,
     comment_metrics,
     filter_by_date,
-    latest_date,
     load_document,
 )
+from src.stats.ui import sidebar_controls
 from src.stats.render import (
     render_author_bar,
     render_comment_metrics,
@@ -152,14 +149,14 @@ _store_redline_tab = _stores["redline_tab"]
 _store_move_tab = _stores["move_tab"]
 
 
-def _store_date_range():
+def _store_date_range() -> None:
     val = st.session_state.get("_filter_date_range")
     if val:
         st.session_state[KEY_FILTER_DATE_MIN] = val[0]
         st.session_state[KEY_FILTER_DATE_MAX] = val[1]
 
 
-def _store_uploaded_file():
+def _store_uploaded_file() -> None:
     f = st.session_state.get("_doc_upload")
     if f is not None:
         if f.size > MAX_UPLOAD_MB * BYTES_PER_MB:
@@ -204,89 +201,6 @@ def _store_uploaded_file():
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
-def _sidebar_controls(
-    comments, redlines, all_dfs: list[pd.DataFrame]
-) -> tuple[datetime, bool, tuple, list[str]]:
-    st.sidebar.markdown("### Document")
-    seed_widget(KEY_DOC_FINALIZED)
-    is_closed = st.sidebar.toggle(
-        "Matter is closed",
-        key="_doc_finalized",
-        on_change=_store_is_closed,
-        help="Toggle ON if the document is part of a closed matter. This setting affects date calculations.",
-    )
-
-    if is_closed:
-        ld = latest_date(comments, redlines)
-        default = ld.date() if ld else datetime.today().date()
-        saved = st.session_state[KEY_DOC_FINALIZED_DATE]
-        st.session_state["_doc_finalized_date"] = (
-            saved if saved is not None else default
-        )
-        closed_date = st.sidebar.date_input(
-            "Closed date",
-            key="_doc_finalized_date",
-            on_change=_store_closed_date,
-        )
-        reference_date = datetime.combine(closed_date, datetime.min.time()) + timedelta(
-            days=_CLOSED_DATE_OFFSET
-        )
-    else:
-        reference_date = datetime.now()
-
-    non_empty = [df for df in all_dfs if not df.empty]
-    if not non_empty:
-        return (
-            reference_date,
-            is_closed,
-            (datetime.now().date(), datetime.now().date()),
-            [],
-        )
-
-    st.sidebar.markdown("### Filters")
-
-    global_date_min = min(df["date"].min().date() for df in non_empty)
-    global_date_max = (
-        max(df["date"].max().date() for df in non_empty)
-        if is_closed
-        else datetime.now().date()
-    )
-
-    saved_min = max(
-        st.session_state[KEY_FILTER_DATE_MIN] or global_date_min, global_date_min
-    )
-    saved_max = min(
-        st.session_state[KEY_FILTER_DATE_MAX] or global_date_max, global_date_max
-    )
-
-    date_range = st.sidebar.slider(
-        "Date range",
-        min_value=global_date_min,
-        max_value=global_date_max,
-        value=(saved_min, saved_max),
-        key="_filter_date_range",
-        on_change=_store_date_range,
-    )
-
-    c_df = all_dfs[0]
-    if not c_df.empty:
-        all_authors = sorted(c_df["author"].unique().tolist())
-        st.session_state["_filter_authors"] = (
-            st.session_state[KEY_FILTER_AUTHORS] or all_authors
-        )
-        selected_authors = (
-            st.sidebar.multiselect(
-                "Comment authors",
-                options=all_authors,
-                key="_filter_authors",
-                on_change=_store_timeline_authors,
-            )
-            or all_authors
-        )
-    else:
-        selected_authors = []
-
-    return reference_date, is_closed, date_range, selected_authors
 
 
 # ---------------------------------------------------------------------------
@@ -537,8 +451,14 @@ if file_bytes:
         comments, redlines, moves, datetime.now()
     )
 
-    reference_date, is_closed, date_range, selected_authors = _sidebar_controls(
-        comments, redlines, [c_df, r_df, m_df]
+    reference_date, is_closed, date_range, selected_authors = sidebar_controls(
+        comments,
+        redlines,
+        [c_df, r_df, m_df],
+        store_is_closed=_store_is_closed,
+        store_closed_date=_store_closed_date,
+        store_date_range=_store_date_range,
+        store_timeline_authors=_store_timeline_authors,
     )
 
     if is_closed:
