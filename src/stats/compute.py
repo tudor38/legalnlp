@@ -103,34 +103,45 @@ def _comment_context_fields(ctx) -> dict:
     }
 
 
-def comment_ages_df(
-    comments: list[Comment],
+def _build_age_grouper(
+    items: list[tuple[object, str]],
+    row_builder,
     reference_date: datetime | None = None,
 ) -> pd.DataFrame:
     now = reference_date or datetime.now()
     rows = []
 
+    for obj, kind in items:
+        dt = _parse_dt(obj, kind)
+        if dt is None:
+            continue
+        row = row_builder(obj, kind, dt)
+        row["age_days"] = (now - dt).days
+        row["date"] = dt
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def comment_ages_df(
+    comments: list[Comment],
+    reference_date: datetime | None = None,
+) -> pd.DataFrame:
     all_items = [(c, "comment") for c in comments] + [
         (reply, "reply") for c in comments for reply in c.replies
     ]
 
-    for c, kind in all_items:
-        dt = _parse_dt(c, kind)
-        if dt is None:
-            continue
-        rows.append(
-            {
-                "author": c.author,
-                "age_days": (now - dt).days,
-                "date": dt,
-                "resolved": c.resolved,
-                "kind": kind,
-                "comment": c.text,
-                **_comment_context_fields(c.context),
-            }
-        )
-
-    return pd.DataFrame(rows)
+    return _build_age_grouper(
+        all_items,
+        lambda c, kind, dt: {
+            "author": c.author,
+            "resolved": c.resolved,
+            "kind": kind,
+            "comment": c.text,
+            **_comment_context_fields(c.context),
+        },
+        reference_date,
+    )
 
 
 def _redline_context_fields(ctx) -> dict:
@@ -146,44 +157,30 @@ def redline_ages_df(
     redlines: list[Redline],
     reference_date: datetime | None = None,
 ) -> pd.DataFrame:
-    now = reference_date or datetime.now()
-    rows = []
-    for r in redlines:
-        dt = _parse_dt(r, "redline")
-        if dt is None:
-            continue
-        rows.append(
-            {
-                "author": r.author,
-                "age_days": (now - dt).days,
-                "date": dt,
-                "kind": r.kind,
-                "text": r.text,
-                **_redline_context_fields(r.context),
-            }
-        )
-    return pd.DataFrame(rows)
+    return _build_age_grouper(
+        [(r, "redline") for r in redlines],
+        lambda r, kind, dt: {
+            "author": r.author,
+            "kind": r.kind,
+            "text": r.text,
+            **_redline_context_fields(r.context),
+        },
+        reference_date,
+    )
 
 
 def move_ages_df(
     moves: list[Move],
     reference_date: datetime | None = None,
 ) -> pd.DataFrame:
-    now = reference_date or datetime.now()
-    rows = []
-    for m in moves:
-        dt = _parse_dt(m, "move")
-        if dt is None:
-            continue
-        rows.append(
-            {
-                "author": m.author,
-                "age_days": (now - dt).days,
-                "date": dt,
-                "text": m.text,
-                "from_para_idx": m.from_para_idx,
-                "to_para_idx": m.to_para_idx,
-                "distance": abs(m.to_para_idx - m.from_para_idx),
-            }
-        )
-    return pd.DataFrame(rows)
+    return _build_age_grouper(
+        [(m, "move") for m in moves],
+        lambda m, kind, dt: {
+            "author": m.author,
+            "text": m.text,
+            "from_para_idx": m.from_para_idx,
+            "to_para_idx": m.to_para_idx,
+            "distance": abs(m.to_para_idx - m.from_para_idx),
+        },
+        reference_date,
+    )

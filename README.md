@@ -82,6 +82,22 @@ The app will open at `http://localhost:8501`.
 
 ---
 
+## Developer Notes
+
+- `app.py` is the Streamlit launcher; each page module is in `pages/`: `document_statistics`, `document_terms`, `search`, `topic_explorer`.
+- `src/stats/config.py` loads `config/app.toml` into `CFG`; keys here must match the TOML sections exactly to avoid `ConfigError`.
+- `src/app_state.py` is the single source of truth for session keys; constants are prefixed as `KEY_*` and should be used consistently.
+- Extraction logic resides in `src/comments`, `src/redlines`, and `src/stats`; prefer isolated functions for test convenience.
+- Tests in `tests/`; run as `pytest`.
+
+### Conventions
+
+- Use `@dataclass` for structured metrics and domain objects (`CommentMetrics`, `DocumentData`).
+- In `src/stats/compute.py`, use page-independent functions returning `pandas.DataFrame` objects; avoid Streamlit coupling.
+- Keep magic constants in `config/app.toml` and follow explicit validation.
+
+---
+
 ## Requirements
 
 All dependencies are listed in `pyproject.toml`. Key ones:

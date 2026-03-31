@@ -95,7 +95,12 @@ def highlight_regex(text: str, pattern: re.Pattern, color: str = "") -> str:
     style = f' style="background:{color}"' if color else ""
     parts: list[str] = []
     last = 0
-    for m in pattern.finditer(text, timeout=1.0):
+    try:
+        iterator = pattern.finditer(text, timeout=1.0)
+    except TypeError:
+        iterator = pattern.finditer(text)
+
+    for m in iterator:
         parts.append(_escape(text[last : m.start()]))
         parts.append(f"<mark{style}>{_escape(m.group(0))}</mark>")
         last = m.end()
@@ -125,7 +130,11 @@ def annotate_regex(text: str, pattern: re.Pattern, color: str = "") -> list:
     parts = []
     last = 0
     try:
-        for m in pattern.finditer(text, timeout=1.0):
+        try:
+            iterator = pattern.finditer(text, timeout=1.0)
+        except TypeError:
+            iterator = pattern.finditer(text)
+        for m in iterator:
             if m.start() > last:
                 parts.append(text[last : m.start()])
             parts.append((m.group(0), "", color))
