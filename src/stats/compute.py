@@ -1,3 +1,4 @@
+import io
 import logging
 from dataclasses import dataclass
 from datetime import datetime, date
@@ -6,8 +7,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from src.comments.extract import Comment
-from src.redlines.extract import Redline, Move
+from src.comments.extract import Comment, extract_comments, extract_paragraphs
+from src.redlines.extract import Redline, Move, extract_redlines, extract_moves
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +102,30 @@ def _comment_context_fields(ctx) -> dict:
         "sentence": [s.text for s in ctx.sentences],
         "paragraph": ctx.paragraph_text,
     }
+
+
+def load_document(file_bytes: bytes) -> tuple:
+    """Load parsed Word document objects from bytes."""
+    comments, version = extract_comments(io.BytesIO(file_bytes))
+    redlines, _ = extract_redlines(io.BytesIO(file_bytes))
+    moves, _ = extract_moves(io.BytesIO(file_bytes))
+    paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
+    return (comments, version, redlines, moves, paragraphs)
+
+
+def build_stats_dfs(
+    comments: list[Comment],
+    redlines: list[Redline],
+    moves: list[Move],
+    reference_date: datetime | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str]]:
+    """Prepare age DataFrames and author list for stats pages."""
+    reference_date = reference_date or datetime.now()
+    c_df = comment_ages_df(comments, reference_date)
+    r_df = redline_ages_df(redlines, reference_date)
+    m_df = move_ages_df(moves, reference_date)
+    all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
+    return c_df, r_df, m_df, all_authors
 
 
 def _build_age_grouper(

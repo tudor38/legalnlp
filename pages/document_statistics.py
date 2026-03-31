@@ -9,12 +9,11 @@ from src.comments.extract import extract_comments, extract_paragraphs
 from src.redlines.extract import extract_redlines, extract_moves
 from src.shared import DocxParseError
 from src.stats.compute import (
-    comment_ages_df,
-    redline_ages_df,
-    move_ages_df,
+    build_stats_dfs,
     comment_metrics,
     filter_by_date,
     latest_date,
+    load_document,
 )
 from src.stats.render import (
     render_author_bar,
@@ -200,18 +199,6 @@ def _store_uploaded_file():
     else:
         set_file_bytes(None)
         set_file_name(None)
-
-
-# ---------------------------------------------------------------------------
-# Document loading
-# ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False, max_entries=3)
-def _load_document(file_bytes: bytes) -> tuple:
-    comments, version = extract_comments(io.BytesIO(file_bytes))
-    redlines, _ = extract_redlines(io.BytesIO(file_bytes))
-    moves, _ = extract_moves(io.BytesIO(file_bytes))
-    doc_paragraphs = extract_paragraphs(io.BytesIO(file_bytes))
-    return comments, version, redlines, moves, doc_paragraphs
 
 
 # ---------------------------------------------------------------------------
@@ -541,23 +528,23 @@ if get_file_name() == _DEFAULT_DOC_NAME and not st.session_state.get(
 
 if file_bytes:
     try:
-        comments, version, redlines, moves, doc_paragraphs = _load_document(file_bytes)
+        comments, version, redlines, moves, doc_paragraphs = load_document(file_bytes)
     except DocxParseError as e:
         st.error(f"Could not read the uploaded file: {e}")
         st.stop()
 
-    c_df = comment_ages_df(comments, datetime.now())
-    r_df = redline_ages_df(redlines, datetime.now())
-    m_df = move_ages_df(moves, datetime.now())
+    c_df, r_df, m_df, _all_authors = build_stats_dfs(
+        comments, redlines, moves, datetime.now()
+    )
 
     reference_date, is_closed, date_range, selected_authors = _sidebar_controls(
         comments, redlines, [c_df, r_df, m_df]
     )
 
     if is_closed:
-        c_df = comment_ages_df(comments, reference_date)
-        r_df = redline_ages_df(redlines, reference_date)
-        m_df = move_ages_df(moves, reference_date)
+        c_df, r_df, m_df, _all_authors = build_stats_dfs(
+            comments, redlines, moves, reference_date
+        )
 
     all_authors = sorted(c_df["author"].unique().tolist()) if not c_df.empty else []
 
