@@ -86,10 +86,10 @@ class MoveViews(NamedTuple):
     timeline: str
 
 
-MAIN_TABS = MainTabs(*CFG.page_1_tabs.main)
-COMMENT_VIEWS = CommentViews(*CFG.page_1_tabs.comment_views)
-REDLINE_VIEWS = RedlineViews(*CFG.page_1_tabs.redline_views)
-MOVE_VIEWS = MoveViews(*CFG.page_1_tabs.move_views)
+MAIN_TABS = MainTabs(*CFG.document_statistics_tabs.main)
+COMMENT_VIEWS = CommentViews(*CFG.document_statistics_tabs.comment_views)
+REDLINE_VIEWS = RedlineViews(*CFG.document_statistics_tabs.redline_views)
+MOVE_VIEWS = MoveViews(*CFG.document_statistics_tabs.move_views)
 
 
 # ---------------------------------------------------------------------------

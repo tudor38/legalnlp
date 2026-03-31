@@ -62,7 +62,7 @@ class TimeBinConfig:
 
 
 @dataclass(frozen=True)
-class Page1Tabs:
+class DocumentStatisticsTabs:
     main: list[str]
     comment_views: list[str]
     redline_views: list[str]
@@ -76,7 +76,7 @@ class AppConfig:
     multi_doc_search: MultiDocSearchConfig
     topic: TopicConfig
     time_bin: TimeBinConfig
-    page_1_tabs: Page1Tabs
+    document_statistics_tabs: DocumentStatisticsTabs
 
 
 # ---------------------------------------------------------------------------
@@ -157,12 +157,12 @@ def _parse(raw: dict) -> AppConfig:
             week_max_days=_field(tb_raw, "week_max_days", "time_bin", int),
         )
 
-        tabs_raw = _section(raw, "pages", "page_1", "tabs")
-        page_1_tabs = Page1Tabs(
-            main=_field(tabs_raw, "main", "pages.page_1.tabs", list),
-            comment_views=_field(tabs_raw, "comment_views", "pages.page_1.tabs", list),
-            redline_views=_field(tabs_raw, "redline_views", "pages.page_1.tabs", list),
-            move_views=_field(tabs_raw, "move_views", "pages.page_1.tabs", list),
+        tabs_raw = _section(raw, "pages", "document_statistics", "tabs")
+        document_statistics_tabs = DocumentStatisticsTabs(
+            main=_field(tabs_raw, "main", "pages.document_statistics.tabs", list),
+            comment_views=_field(tabs_raw, "comment_views", "pages.document_statistics.tabs", list),
+            redline_views=_field(tabs_raw, "redline_views", "pages.document_statistics.tabs", list),
+            move_views=_field(tabs_raw, "move_views", "pages.document_statistics.tabs", list),
         )
 
         return AppConfig(
@@ -171,7 +171,7 @@ def _parse(raw: dict) -> AppConfig:
             multi_doc_search=multi_doc_search,
             topic=topic,
             time_bin=time_bin,
-            page_1_tabs=page_1_tabs,
+            document_statistics_tabs=document_statistics_tabs,
         )
     except ConfigError:
         raise

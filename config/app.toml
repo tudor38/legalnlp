@@ -27,7 +27,7 @@ umap_min_dist        = 0.05
 day_max_days  = 30
 week_max_days = 180
 
-[pages.page_1.tabs]
+[pages.document_statistics.tabs]
 main          = ["Comments", "Redlines", "Moves"]
 comment_views = ["Counts", "Timeline"]
 redline_views = ["Counts", "Timeline"]
