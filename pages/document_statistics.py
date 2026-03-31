@@ -125,6 +125,7 @@ for key, val in DEFAULTS.items():
 
 _CB: dict[str, tuple[str, object]] = {
     "is_closed": (KEY_DOC_FINALIZED, False),
+    "closed_date": (KEY_DOC_FINALIZED_DATE, None),
     "show_fields": (KEY_COMMENT_TL_FIELDS, []),
     "r_show_fields": (KEY_REDLINE_TL_FIELDS, []),
     "m_show_fields": (KEY_MOVE_TL_FIELDS, []),
@@ -137,6 +138,7 @@ _CB: dict[str, tuple[str, object]] = {
 _stores = {name: make_store(key, default) for name, (key, default) in _CB.items()}
 
 _store_is_closed = _stores["is_closed"]
+_store_closed_date = _stores["closed_date"]
 _store_show_fields = _stores["show_fields"]
 _store_r_show_fields = _stores["r_show_fields"]
 _store_m_show_fields = _stores["m_show_fields"]
@@ -454,6 +456,7 @@ if file_bytes:
         redlines,
         [c_df, r_df, m_df],
         store_is_closed=_store_is_closed,
+        store_closed_date=_store_closed_date,
         store_date_range=_store_date_range,
         store_timeline_authors=_store_timeline_authors,
     )

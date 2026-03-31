@@ -12,6 +12,11 @@ def test_sidebar_controls_non_empty(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(st.sidebar, "toggle", lambda *args, **kwargs: False)
     monkeypatch.setattr(
         st.sidebar,
+        "date_input",
+        lambda *args, **kwargs: date(2024, 1, 15),
+    )
+    monkeypatch.setattr(
+        st.sidebar,
         "slider",
         lambda *args, **kwargs: (date(2024, 1, 1), date(2024, 1, 1)),
     )
