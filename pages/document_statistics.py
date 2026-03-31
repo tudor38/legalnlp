@@ -8,6 +8,7 @@ from src.shared import DocxParseError
 from src.stats.compute import (
     build_stats_dfs,
     comment_metrics,
+    comment_metrics_from_df,
     filter_by_date,
     load_document,
 )
@@ -261,7 +262,7 @@ def _render_comments(
     all_authors: list[str],
 ) -> None:
     render_date_caption(filtered_c_df, reference_date, is_closed)
-    render_comment_metrics(comment_metrics(comments))
+    render_comment_metrics(comment_metrics_from_df(filtered_c_df))
 
     seed_widget(KEY_COMMENT_VIEW)
     comment_tab = st.pills(

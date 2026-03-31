@@ -1,6 +1,6 @@
 
 from src.comments.extract import Comment
-from src.stats.compute import comment_metrics, latest_date
+from src.stats.compute import comment_metrics, comment_metrics_from_df, latest_date
 
 
 def _comment(id: str, date: str, resolved: bool = False, replies=None) -> Comment:
@@ -38,6 +38,32 @@ class TestCommentMetrics:
         reply = _comment("2", "2024-01-02", resolved=True)
         parent = _comment("1", "2024-01-01", replies=[reply])
         m = comment_metrics([parent])
+        assert m.resolved == 1
+
+
+class TestCommentMetricsFromDf:
+    def test_empty_df(self):
+        from pandas import DataFrame
+
+        m = comment_metrics_from_df(DataFrame())
+        assert m.total == 0
+        assert m.top_level == 0
+        assert m.replies == 0
+        assert m.resolved == 0
+
+    def test_non_empty_df(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "kind": ["comment", "reply", "comment"],
+                "resolved": [False, True, False],
+            }
+        )
+        m = comment_metrics_from_df(df)
+        assert m.total == 3
+        assert m.top_level == 2
+        assert m.replies == 1
         assert m.resolved == 1
 
 

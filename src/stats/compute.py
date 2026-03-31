@@ -55,6 +55,24 @@ def comment_metrics(comments: list[Comment]) -> CommentMetrics:
     )
 
 
+def comment_metrics_from_df(c_df: pd.DataFrame) -> CommentMetrics:
+    """Compute comment metrics from a filtered comments DataFrame."""
+    if c_df.empty:
+        return CommentMetrics(total=0, top_level=0, replies=0, resolved=0)
+
+    top_level = int((c_df["kind"] == "comment").sum())
+    replies = int((c_df["kind"] == "reply").sum())
+    resolved = int(c_df["resolved"].sum())
+    total = top_level + replies
+
+    return CommentMetrics(
+        total=total,
+        top_level=top_level,
+        replies=replies,
+        resolved=resolved,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Date helpers
 # ---------------------------------------------------------------------------

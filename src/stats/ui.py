@@ -85,11 +85,8 @@ def sidebar_controls(
         )
 
     global_date_min = min(df["date"].min().date() for df in non_empty)
-    global_date_max = (
-        max(df["date"].max().date() for df in non_empty)
-        if is_closed
-        else datetime.now().date()
-    )
+    data_date_max = max(df["date"].max().date() for df in non_empty)
+    global_date_max = data_date_max if is_closed else min(data_date_max, datetime.now().date())
 
     saved_min = max(
         st.session_state[KEY_FILTER_DATE_MIN] or global_date_min, global_date_min
